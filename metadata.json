@@ -1,0 +1,6 @@
+{
+  "name": "Offnot Energy Management System",
+  "description": "Enterprise solar business management system for inventory control, multi-tier POS sales, installer management, project tracking, purchasing, and financial accounting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
