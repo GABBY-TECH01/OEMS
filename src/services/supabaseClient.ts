@@ -3,6 +3,8 @@
  * Ready for live database connection once VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set.
  */
 
+import { getSupabaseUrl, getSupabaseAnonKey, isSupabaseConfigured } from '../lib/supabase';
+
 export interface SupabaseConfig {
   url?: string;
   anonKey?: string;
@@ -10,12 +12,12 @@ export interface SupabaseConfig {
 }
 
 export const getSupabaseConfig = (): SupabaseConfig => {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const url = getSupabaseUrl();
+  const anonKey = getSupabaseAnonKey();
   return {
     url,
     anonKey,
-    isConfigured: Boolean(url && anonKey && url !== 'MY_SUPABASE_URL'),
+    isConfigured: isSupabaseConfigured(),
   };
 };
 

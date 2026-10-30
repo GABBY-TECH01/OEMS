@@ -19,13 +19,15 @@ import {
   AlertTriangle,
   ArrowRight,
   RefreshCw,
+  Database,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { CompanySettings, UserRole, PermissionKey } from '../../types';
 import { getRoleLabel } from '../../utils/formatters';
 import { ConfirmDialog } from '../common/CommonUI';
+import { MigrationViewer } from '../migration/MigrationViewer';
 
-type SettingsSubTab = 'matrix' | 'staff_roles' | 'profile' | 'policies' | 'backup';
+type SettingsSubTab = 'matrix' | 'staff_roles' | 'profile' | 'policies' | 'backup' | 'supabase';
 
 interface PermissionDefinition {
   key: PermissionKey;
@@ -374,6 +376,21 @@ export const Settings: React.FC = () => {
         >
           <Download className="w-4 h-4" />
           <span>Data Backup & Zero Ledger</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('supabase')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl transition-all shrink-0 ${
+            activeSubTab === 'supabase'
+              ? 'bg-emerald-900 text-white shadow-xs'
+              : 'text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100/70 border border-emerald-200'
+          }`}
+        >
+          <Database className="w-4 h-4 text-emerald-600" />
+          <span>Supabase Live DB &amp; SQL</span>
+          <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-200/80 text-emerald-900 font-bold">
+            Project OEMS
+          </span>
         </button>
       </div>
 
@@ -855,6 +872,13 @@ export const Settings: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* SUB-TAB 6: SUPABASE LIVE DB & SQL MIGRATIONS */}
+      {activeSubTab === 'supabase' && (
+        <div className="space-y-4">
+          <MigrationViewer />
         </div>
       )}
 

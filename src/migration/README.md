@@ -1,95 +1,79 @@
-# Offnot Energy Management System - Supabase SQL Migration Guide
+# Offnot Energy Management System - Supabase Migration & SQL Deployment Guide
 
+Company: **Offnot Energy Systems Ltd**  
 Location: **Inside Tipper Garage, Dalute Road, Ibadan, Oyo State, Nigeria**  
-Company: **Offnot Energy**  
-Slogan: **Clean Energy, Stronger Tomorrow**  
-Currency: **Nigerian Naira (₦ / NGN)**
+Brand Slogan: **Clean Energy, Stronger Tomorrow**  
+Currency: **Nigerian Naira (₦ / NGN)**  
+Supabase Target: **Project OEMS / PostgreSQL 15+**  
 
 ---
 
-## 📁 Migration Files Directory
+## 📸 Guided Walkthrough for Your Supabase Project (Project OEMS)
 
-All migration scripts are stored directly in this folder (`/src/migration/`):
+In your Supabase project dashboard (**OEMS** under `francisgabriel932@gmail.com's Org`):
 
-| File | Description | When to Use |
+### Step 1: Open the SQL Editor in Supabase
+1. Look at the **black left sidebar** on your Supabase screen.
+2. The icons from top to bottom are:
+   - **Home** (icon 1)
+   - **Table Editor** (icon 2 — where your screenshot showed *"No tables or views"*)
+   - **SQL Editor** (icon 3 — the terminal `<>` / `>_` symbol)
+3. Click on the **SQL Editor** icon (`>_`).
+
+### Step 2: Open a New Query
+1. At the top of the SQL Editor, click the **"+ New query"** button (or choose *Empty query*).
+
+### Step 3: Run the Master SQL Script
+1. Open the master script in this folder: [`05_complete_migration_single_file.sql`](./05_complete_migration_single_file.sql).
+2. Copy the entire file content (or click **"Copy Master SQL"** in the Offnot Energy app under **Company Settings ➔ Supabase Live DB & SQL**).
+3. Paste the entire SQL script into the query window in Supabase.
+4. Click the green **RUN** button (or press `Ctrl + Enter` / `Cmd + Enter`).
+5. Supabase will execute the statements and display: `Success. No rows returned.`
+
+### Step 4: Verify Your Tables in Supabase
+1. Click the **Table Editor** icon on the left sidebar (the 2nd icon from the top, where your screenshot was taken).
+2. You will now see all **16 database tables** created and populated with clean initial zero-accounting structures:
+   - `company_settings`: Offnot Energy corporate profile & Ibadan address
+   - `branches`: Showroom HQ (Tipper Garage), Main Store (Dalute Road), Warehouse 2 (Iwo Road Depot)
+   - `user_profiles`: Superadmin Francis Gabriel (`francisgabriel932@gmail.com`) and Deputy Admin Ayomide Bakare (`admin@offnotenergy.ng`)
+   - `categories`: 15 solar equipment classifications (Inverters, Panels, Lithium batteries, etc.)
+   - `suppliers`: Felicity Solar, Jinko Solar, Itel Energy, Coleman Cable Depot
+   - `products`: 8 core solar products with **clean zero stock (₦0.00 ledger)**
+   - `stock_movements`: Stock tracking ledger
+   - `customers`: Client & installer directory
+   - `purchase_orders`: Vendor procurement records
+   - `sales`: Point of sale invoices & transactions
+   - `payments`: Split/single payment receipts
+   - `quotations`: Commercial solar quotations
+   - `installation_projects`: Engineering job records
+   - `expenses`: Operating expense records
+   - `audit_logs`: System access & security audit trail
+   - `app_notifications`: Real-time system notifications
+
+---
+
+## 🔗 Connecting Supabase as Your Live Database
+
+To have the Offnot Energy Management System query and persist directly to your Supabase tables:
+
+1. In Supabase, click the **Project Settings** gear icon at the bottom of the left sidebar.
+2. Click **API** under Configuration.
+3. Copy your:
+   - **Project URL** (e.g. `https://xyzabcdefghijklm.supabase.co`)
+   - **anon public API Key** (`eyJhbGciOiJIUzI1NiIsInR5cCI6...`)
+4. In the Offnot Energy app, navigate to **Company Settings ➔ Supabase Live DB & SQL**.
+5. Paste both values into the connection form and click **"Save & Connect Supabase"**.
+6. Click **"Test Connection & Check Tables"** — you will see green checkmarks for all 16 tables!
+7. Optionally click **"Sync Local Data to Supabase"** to synchronize any existing records directly into your Supabase database.
+
+---
+
+## 📂 Migration Files Reference
+
+| File | Description | Purpose |
 | :--- | :--- | :--- |
-| **`05_complete_migration_single_file.sql`** | **⭐ All-in-One Master Script** (Tables, Types, Indexes, Constraints, Seed Data). | **Recommended!** Copy & paste this single script into Supabase SQL Editor to set up everything in 1 click. |
-| **`01_schema.sql`** | Core schema DDL: 15 tables, custom ENUM types, primary keys, foreign keys with referential integrity, and performance indexes. | Modular migration step 1. |
-| **`02_triggers_and_functions.sql`** | Stored procedures: Atomic POS sales (`fn_execute_sale`), Goods Receipt (`fn_receive_goods`), Stock adjustments (`fn_adjust_stock`), and auto-updating timestamps. | Modular migration step 2. |
-| **`03_rls_security_rules.sql`** | Supabase Row Level Security (RLS) policies enforcing role-based permissions (Super Admin, CEO, Manager, Inventory, Sales, Accountant, Tech Staff). | Modular migration step 3. |
-| **`04_seed_data.sql`** | Initial production seed records: Offnot Energy contact details, Ibadan warehouses, solar categories, suppliers, real products (Felicity, Deye, Jinko, Itel), and opening stock ledger. | Modular migration step 4. |
-
----
-
-## 🚀 How to Migrate to Supabase in 3 Minutes
-
-### Step 1: Create a Free Supabase Project
-1. Go to [https://supabase.com](https://supabase.com) and sign in or create an account.
-2. Click **"New Project"**.
-3. Set your project details:
-   - **Name**: `Offnot-Energy-Ibadan`
-   - **Database Password**: Choose a strong secure password.
-   - **Region**: Select Europe (Frankfurt / London) or West Africa proximity.
-4. Click **"Create new project"** and wait ~60 seconds for the database to provision.
-
-### Step 2: Run the SQL Migration
-1. In your Supabase Dashboard, click on **"SQL Editor"** (the terminal `>_` icon on the left sidebar).
-2. Click **"New Query"**.
-3. Open [`/src/migration/05_complete_migration_single_file.sql`](05_complete_migration_single_file.sql) in this repository or in the in-app Database Migration tab.
-4. Copy the entire file content, paste it into the Supabase SQL Editor, and click **"RUN"**.
-5. You will see a success message: `Success. No rows returned.`
-
-### Step 3: Verify the Tables
-1. Click on **"Table Editor"** in the Supabase sidebar.
-2. You will see all 15 operational tables populated:
-   - `company_settings`
-   - `warehouses`
-   - `user_profiles`
-   - `categories`
-   - `suppliers`
-   - `products`
-   - `stock_movements` (Immutable stock ledger)
-   - `customers` (CRM & registered installers)
-   - `purchase_orders`
-   - `sales` (POS orders)
-   - `payments`
-   - `quotations`
-   - `installation_projects`
-   - `expenses`
-   - `audit_logs`
-
----
-
-## 🔑 Environment Variables (.env)
-
-Add the following keys to your `.env` file when switching your live API traffic to Supabase:
-
-```env
-# Supabase Configuration
-VITE_SUPABASE_URL="https://your-project-id.supabase.co"
-VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-```
-
-Both keys can be found in your Supabase Dashboard under:  
-**Project Settings** → **API** → **Project URL** & **Project API keys (anon public)**.
-
----
-
-## 🛠️ Frontend Supabase Client Integration
-
-A client adapter is provided in `/src/services/supabaseClient.ts`. To use it in production:
-
-```bash
-npm install @supabase/supabase-js
-```
-
-And initialize with:
-
-```typescript
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-```
+| **`05_complete_migration_single_file.sql`** | **⭐ All-in-One Master Script** (Tables, Types, Indexes, Constraints, Triggers, RLS, Seed Data) | **Single-step full deployment in Supabase SQL Editor.** |
+| **`01_schema.sql`** | Core Schema DDL | Modular table & enum declarations |
+| **`02_triggers_and_functions.sql`** | Stored Procedures | Auto timestamps & ACID transaction functions |
+| **`03_rls_security_rules.sql`** | Row Level Security | Role-based permission policies |
+| **`04_seed_data.sql`** | Ibadan Business Seed Data | Clean zero ledger catalog data |
