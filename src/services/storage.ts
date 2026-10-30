@@ -1047,15 +1047,38 @@ export const StorageService = {
     setStorage(STORAGE_KEYS.CURRENT_USER_ID, id);
   },
 
-  // Authentication Session
+  // Authentication Session (Stored in sessionStorage so opening new links or browser sessions always prompts Login first)
   getAuthSession(): { user: User; token: string } | null {
-    return getStorage<{ user: User; token: string } | null>(STORAGE_KEYS.AUTH_SESSION, null);
+    if (typeof window === 'undefined') return null;
+    try {
+      const sessionStr = sessionStorage.getItem(STORAGE_KEYS.AUTH_SESSION);
+      if (sessionStr) {
+        return JSON.parse(sessionStr);
+      }
+    } catch (e) {
+      console.error('Error reading auth session:', e);
+    }
+    return null;
   },
   setAuthSession(session: { user: User; token: string } | null): void {
-    setStorage(STORAGE_KEYS.AUTH_SESSION, session);
+    if (typeof window === 'undefined') return;
+    try {
+      if (session) {
+        sessionStorage.setItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(session));
+      } else {
+        sessionStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
+      }
+      // Clear any legacy persistent session so new tabs/links always require login
+      localStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
+    } catch (e) {
+      console.error('Error saving auth session:', e);
+    }
   },
   clearAuthSession(): void {
-    localStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
+      localStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
+    }
   },
 
   // Products

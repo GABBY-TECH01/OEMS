@@ -11,15 +11,13 @@ import { StorageService, INITIAL_ROLE_PERMISSIONS } from '../services/storage';
  */
 export function formatNaira(amount: number | undefined | null, includeDecimals = true): string {
   if (amount === undefined || amount === null || isNaN(amount)) {
-    return '₦0.00';
+    return includeDecimals ? '₦0.00' : '₦0';
   }
-  return new Intl.NumberFormat('en-NG', {
-    style: 'currency',
-    currency: 'NGN',
-    currencyDisplay: 'narrowSymbol',
+  const formatted = Math.abs(amount).toLocaleString('en-US', {
     minimumFractionDigits: includeDecimals ? 2 : 0,
     maximumFractionDigits: includeDecimals ? 2 : 0,
-  }).format(amount);
+  });
+  return amount < 0 ? `-₦${formatted}` : `₦${formatted}`;
 }
 
 /**
@@ -131,19 +129,17 @@ export function canAccessAllBranches(user: { role: UserRole; canAccessAllBranche
 
 /**
  * Check if user can access the Branches & Hubs tab
- * "and the branches hub should only be accesible by the superadmin, CEO, and inventory manager"
+ * "the manage branch hub which is only the superadmin that will be ble to access"
  */
 export function canAccessBranchesHub(user: { role: UserRole; hasFullSystemAccess?: boolean }): boolean {
   if (user.role === 'super_admin') return true;
-  if (user.role === 'ceo') return true;
-  if (user.role === 'inventory_officer') return true;
-  if (user.role === 'admin') return true;
+  if (user.role === 'admin' && user.hasFullSystemAccess) return true;
   return false;
 }
 
 /**
  * Return allowed navigation tabs for a given staff member based on role & permissions
- * Enforces strict role isolation and removes the dashboard from roles not meant to see it.
+ * Enforces strict role isolation and restricts branch governance to Superadmin.
  */
 export function getAllowedTabsForUser(user: { role: UserRole; hasFullSystemAccess?: boolean }): import('../types').ActiveTab[] {
   if (user.role === 'super_admin' || (user.role === 'admin' && user.hasFullSystemAccess)) {
@@ -169,7 +165,6 @@ export function getAllowedTabsForUser(user: { role: UserRole; hasFullSystemAcces
     case 'admin':
       return [
         'dashboard',
-        'branches',
         'pos',
         'inventory',
         'sales_history',
@@ -185,7 +180,6 @@ export function getAllowedTabsForUser(user: { role: UserRole; hasFullSystemAcces
     case 'ceo':
       return [
         'dashboard',
-        'branches',
         'inventory',
         'sales_history',
         'purchasing',
@@ -212,8 +206,8 @@ export function getAllowedTabsForUser(user: { role: UserRole; hasFullSystemAcces
       ];
 
     case 'inventory_officer':
-      // Dashboard removed; focused strictly on warehouse, inventory, and branch transfers
-      return ['inventory', 'purchasing', 'branches'];
+      // Warehouse & inventory only
+      return ['inventory', 'purchasing'];
 
     case 'sales_rep':
       // Dashboard removed; shopfloor sales focus only

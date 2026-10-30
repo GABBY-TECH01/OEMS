@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   Sparkles,
   LogOut,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useApp, ActiveTab } from '../../context/AppContext';
 import { getRoleLabel, getAllowedTabsForUser } from '../../utils/formatters';
@@ -36,6 +38,8 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
     staffAccounts,
     currentUser,
     logout,
+    theme,
+    toggleTheme,
   } = useApp();
 
   const lowStockCount = products.filter(p => p.currentStock <= p.reorderLevel).length;
@@ -263,17 +267,38 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={logout}
-            className="w-full py-2 px-3 rounded-lg bg-rose-950/50 hover:bg-rose-900/80 border border-rose-800/60 text-rose-200 hover:text-white text-xs font-semibold transition-all flex items-center justify-center gap-2 shadow-xs"
-            title="Log out of Offnot Energy Workspace"
-          >
-            <LogOut className="w-3.5 h-3.5 text-rose-400" />
-            <span>Sign Out</span>
-          </button>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-1.5 shadow-xs"
+              title="Toggle Light / Dark mode"
+            >
+              {theme === 'dark' ? (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Light</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Dark</span>
+                </>
+              )}
+            </button>
 
-          <div className="mt-2 text-center text-[10px] text-slate-500 font-mono">
+            <button
+              type="button"
+              onClick={logout}
+              className="py-1.5 px-2.5 rounded-lg bg-rose-950/50 hover:bg-rose-900/80 border border-rose-800/60 text-rose-200 hover:text-white text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shadow-xs"
+              title="Log out of Offnot Energy Workspace"
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-400" />
+              <span>Sign Out</span>
+            </button>
+          </div>
+
+          <div className="mt-1 text-center text-[10px] text-slate-500 font-mono">
             HQ: Tipper Garage, Ibadan • ₦ NGN
           </div>
         </div>

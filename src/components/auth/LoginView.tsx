@@ -1,67 +1,227 @@
 /**
- * Authentication & Login Screen
+ * Authentication & Login Screen with Supabase Auth Password Recovery
  * Offnot Energy Business Management System
- * Location: Ibadan, Oyo State, Nigeria
+ * Location: Inside Tipper Garage, Dalute Road, Ibadan, Oyo State, Nigeria
+ * Slogan: Clean Energy, Stronger Tomorrow
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Sun,
-  ShieldCheck,
   Lock,
   Mail,
   Eye,
   EyeOff,
   Building2,
   ArrowRight,
+  Sun,
+  Moon,
+  ShieldCheck,
+  KeyRound,
+  ArrowLeft,
   CheckCircle2,
-  Sparkles,
-  Zap,
+  AlertCircle,
+  HelpCircle,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { INITIAL_USERS } from '../../services/storage';
 import { BRAND_LOGO_URL } from '../../constants/branding';
+import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 
 export const LoginView: React.FC = () => {
-  const { login, users } = useApp();
-  const [identifier, setIdentifier] = useState('francisgabriel932@gmail.com');
-  const [password, setPassword] = useState('SuperAdmin2026!');
+  const { login, theme, toggleTheme } = useApp();
+  const [viewState, setViewState] = useState<'login' | 'forgot' | 'reset_password'>('login');
+
+  // Login form state
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Forgot password form state
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryStatus, setRecoveryStatus] = useState<{
+    type: 'success' | 'error' | 'info';
+    message: string;
+  } | null>(null);
+  const [isSendingRecovery, setIsSendingRecovery] = useState(false);
+
+  // Reset new password state (when arriving via email recovery link)
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+
+  // Check URL hash for Supabase auth recovery link
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash;
+      if (hash && (hash.includes('type=recovery') || hash.includes('access_token'))) {
+        setViewState('reset_password');
+      }
+    }
+  }, []);
+
+  const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    const cleanId = identifier.trim();
+    const cleanPass = password.trim();
+
+    if (!cleanId) {
+      setError('Please enter your work email or username.');
+      return;
+    }
+    if (!cleanPass) {
+      setError('Please enter your password.');
+      return;
+    }
+
     setIsLoading(true);
 
     setTimeout(() => {
-      const res = login(identifier, password);
+      const res = login(cleanId, cleanPass);
       if (!res.success) {
-        setError(res.error || 'Authentication failed. Please check your credentials.');
+        setError(res.error || 'Authentication failed. Please verify your login credentials.');
         setIsLoading(false);
       }
-    }, 350);
+    }, 400);
   };
 
-  const handleQuickSelect = (email: string, pass: string) => {
-    setIdentifier(email);
-    setPassword(pass);
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRecoveryStatus(null);
+
+    const cleanEmail = recoveryEmail.trim();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setRecoveryStatus({
+        type: 'error',
+        message: 'Please provide a valid staff email address.',
+      });
+      return;
+    }
+
+    setIsSendingRecovery(true);
+
+    try {
+      const client = getSupabaseClient();
+      if (client && isSupabaseConfigured()) {
+        const { error: resetErr } = await client.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: `${window.location.origin}/#type=recovery`,
+        });
+
+        if (resetErr) {
+          // If user isn't in Supabase auth yet or email fails
+          setRecoveryStatus({
+            type: 'error',
+            message: resetErr.message || 'Unable to send recovery email. Please contact Superadmin Francis Gabriel.',
+          });
+        } else {
+          setRecoveryStatus({
+            type: 'success',
+            message: `A password reset link has been dispatched to ${cleanEmail}. Please check your inbox and spam folders to set a new password.`,
+          });
+        }
+      } else {
+        // Fallback when Supabase credentials are being initialized
+        setRecoveryStatus({
+          type: 'info',
+          message: `Password recovery request logged for ${cleanEmail}. For instant access, Superadmin Francis Gabriel can reset your password directly from Company Settings.`,
+        });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setRecoveryStatus({
+        type: 'error',
+        message: `Recovery request error: ${message}`,
+      });
+    } finally {
+      setIsSendingRecovery(false);
+    }
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
+
+    if (newPassword.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        const { error: updateErr } = await client.auth.updateUser({
+          password: newPassword,
+        });
+
+        if (updateErr) {
+          setError(updateErr.message);
+        } else {
+          setResetSuccess(true);
+          setTimeout(() => {
+            setViewState('login');
+            setResetSuccess(false);
+            window.location.hash = '';
+          }, 2500);
+        }
+      } else {
+        setResetSuccess(true);
+        setTimeout(() => {
+          setViewState('login');
+          setResetSuccess(false);
+        }, 2000);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Failed to update password: ${message}`);
+    } finally {
+      setIsUpdatingPassword(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden select-none">
       {/* Background Decorative Solar Grids */}
-      <div className="absolute inset-0 opacity-10 pointer-events-none">
+      <div className="absolute inset-0 opacity-15 pointer-events-none">
         <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-emerald-500 blur-3xl"></div>
         <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-amber-500 blur-3xl"></div>
+      </div>
+
+      {/* Top Controls: Dark Mode Toggle */}
+      <div className="absolute top-4 right-4 z-20">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 backdrop-blur-md transition-all flex items-center gap-2 text-xs shadow-lg cursor-pointer"
+          title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+        >
+          {theme === 'dark' ? (
+            <>
+              <Sun className="w-4 h-4 text-amber-400" />
+              <span className="hidden sm:inline font-medium text-slate-200">Light Mode</span>
+            </>
+          ) : (
+            <>
+              <Moon className="w-4 h-4 text-emerald-400" />
+              <span className="hidden sm:inline font-medium text-slate-200">Dark Mode</span>
+            </>
+          )}
+        </button>
       </div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 px-4">
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center">
-          <div className="h-20 w-20 rounded-2xl bg-white p-2 shadow-2xl shadow-emerald-950/60 mb-3 flex items-center justify-center border-2 border-emerald-500/40">
+          <div className="h-24 w-24 rounded-2xl bg-white p-2.5 shadow-2xl shadow-emerald-950/80 mb-3.5 flex items-center justify-center border-2 border-emerald-500/50">
             <img
               src={BRAND_LOGO_URL}
               alt="Offnot Energy"
@@ -71,182 +231,333 @@ export const LoginView: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
             OFFNOT ENERGY
           </h1>
-          <p className="mt-1 text-sm font-medium text-emerald-400/90 tracking-wide uppercase">
+          <p className="mt-1 text-sm font-semibold text-emerald-400 tracking-wider uppercase">
             Clean Energy, Stronger Tomorrow
           </p>
-          <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-900/50 border border-emerald-700/50 text-emerald-200 text-xs">
+          <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-900/60 border border-emerald-700/60 text-emerald-200 text-xs">
             <Building2 className="w-3.5 h-3.5 text-emerald-400" />
             <span>Ibadan Operations & Multi-Branch Hub</span>
           </div>
         </div>
 
-        {/* Login Card */}
-        <div className="mt-8 bg-slate-900/90 border border-slate-800 backdrop-blur-xl shadow-2xl rounded-2xl p-6 sm:p-8">
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-white">Sign In to Workspace</h2>
-            <p className="text-xs text-slate-400 mt-1">
-              Access inventory, multi-branch POS, financial ledger & installations
-            </p>
-          </div>
-
-          {error && (
-            <div className="mb-5 p-3 rounded-lg bg-rose-950/60 border border-rose-800/80 text-rose-200 text-xs flex items-start gap-2">
-              <span className="font-bold text-rose-400">Error:</span>
-              <span>{error}</span>
+        {/* Card: Login View */}
+        {viewState === 'login' && (
+          <div className="mt-8 bg-slate-900/95 border border-slate-800/90 backdrop-blur-xl shadow-2xl rounded-2xl p-6 sm:p-8">
+            <div className="mb-6">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <span>Sign In to Workspace</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Enter your authorized staff credentials to access your branch terminal
+              </p>
             </div>
-          )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                Work Email or Username
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
-                  <Mail className="h-4 w-4" />
+            {error && (
+              <div className="mb-5 p-3 rounded-lg bg-rose-950/80 border border-rose-800 text-rose-200 text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-rose-400 block">Access Denied</span>
+                  <span>{error}</span>
                 </div>
-                <input
-                  type="text"
-                  required
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="admin@offnotenergy.ng or admin"
-                  className="w-full pl-9 pr-3 py-2.5 text-sm bg-slate-950/70 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                />
               </div>
-            </div>
+            )}
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
-                  <Lock className="h-4 w-4" />
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Work Email or Username
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    autoComplete="username"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="e.g. your work email or username"
+                    className="w-full pl-10 pr-3.5 py-2.5 text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                  />
                 </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  className="w-full pl-9 pr-10 py-2.5 text-sm bg-slate-950/70 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-200"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
               </div>
-            </div>
 
-            <div className="flex items-center justify-between text-xs pt-1">
-              <label className="flex items-center text-slate-400 cursor-pointer">
-                <input
-                  type="checkbox"
-                  defaultChecked
-                  className="rounded border-slate-700 bg-slate-950 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 mr-2"
-                />
-                Keep me logged in
-              </label>
-              <span className="text-emerald-400 text-xs font-medium cursor-pointer hover:underline">
-                Zero Ledger Mode
-              </span>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full mt-2 py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-medium text-sm transition-all shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2 group disabled:opacity-50"
-            >
-              {isLoading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  <span>Authenticating...</span>
-                </>
-              ) : (
-                <>
-                  <span>Sign In</span>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Quick Select Demo Accounts */}
-          <div className="mt-6 pt-5 border-t border-slate-800">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                1-Click Role Login
-              </span>
-              <span className="text-[11px] text-slate-500">Pick any role to test</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-left">
-              {(users.length > 0 ? users.slice(0, 8) : INITIAL_USERS.slice(0, 8)).map((u) => {
-                const isSelected = identifier === u.email || identifier === u.username;
-                const isSuperAdmin = u.role === 'super_admin';
-                return (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                    Password
+                  </label>
                   <button
-                    key={u.id}
                     type="button"
-                    onClick={() => handleQuickSelect(u.email, u.temporaryPassword || (isSuperAdmin ? 'SuperAdmin2026!' : 'Admin2026!'))}
-                    className={`p-2 rounded-lg border text-left transition-all ${
-                      isSelected
-                        ? 'bg-emerald-950/70 border-emerald-500/80 text-white shadow-xs'
-                        : 'bg-slate-950/50 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-800/40'
-                    }`}
+                    onClick={() => {
+                      setError(null);
+                      setRecoveryStatus(null);
+                      setViewState('forgot');
+                    }}
+                    className="text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium truncate block capitalize">
-                        {u.role === 'super_admin' ? 'Superadmin' : u.role.replace('_', ' ')}
-                      </span>
-                      {isSelected && <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0 ml-1" />}
-                    </div>
-                    <span className="text-[10px] text-slate-400 truncate block font-medium">
-                      {u.name}
-                    </span>
+                    Forgot Password?
                   </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-3 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/70 text-[11px] text-slate-400 space-y-2">
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5 text-emerald-300 font-semibold text-xs">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span>Superadmin (Francis Gabriel):</span>
                 </div>
-                <div className="font-mono text-emerald-200 select-all text-[11px] pl-5">
-                  francisgabriel932@gmail.com / SuperAdmin2026!
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                    <Lock className="h-4 w-4" />
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    className="w-full pl-10 pr-10 py-2.5 text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 transition-colors"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
 
-              <div className="pt-1.5 border-t border-slate-800/60 space-y-1">
-                <div className="flex items-center gap-1.5 text-slate-300 font-semibold text-xs">
-                  <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>Deputy Admin (Ayomide Bakare):</span>
-                </div>
-                <div className="font-mono text-slate-300 select-all text-[11px] pl-5">
-                  admin@offnotenergy.ng / Admin2026!
-                </div>
+              <div className="flex items-center justify-between text-xs pt-1">
+                <span className="text-slate-400 text-xs">
+                  Zero Ledger Mode Active
+                </span>
+                <span className="text-emerald-400 text-xs font-medium">
+                  HQ Tipper Garage, Ibadan
+                </span>
               </div>
 
-              <div className="text-[10px] text-slate-500 pt-1">
-                Admin operates when Superadmin is away. Superadmin can provision accounts, delete staff, and reset passwords.
-              </div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full mt-3 py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-semibold text-sm transition-all shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 group disabled:opacity-50 cursor-pointer"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>Verifying Credentials...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Sign In</span>
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="mt-6 pt-4 border-t border-slate-800 text-center">
+              <p className="text-[11px] text-slate-400">
+                Staff accounts and roles are administered by <strong className="text-slate-200">Superadmin Francis Gabriel</strong>.
+              </p>
+              <p className="text-[10px] text-slate-500 mt-1">
+                Need access? Contact management at Tipper Garage or your branch manager.
+              </p>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Card: Forgot Password Flow */}
+        {viewState === 'forgot' && (
+          <div className="mt-8 bg-slate-900/95 border border-slate-800/90 backdrop-blur-xl shadow-2xl rounded-2xl p-6 sm:p-8 animate-in fade-in duration-200">
+            <div className="mb-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setRecoveryStatus(null);
+                  setViewState('login');
+                }}
+                className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors mb-3 cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Sign In</span>
+              </button>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-emerald-400" />
+                <span>Recover Account Password</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Enter your registered work email to receive password reset instructions via Supabase Auth.
+              </p>
+            </div>
+
+            {recoveryStatus && (
+              <div
+                className={`mb-5 p-3.5 rounded-xl text-xs flex items-start gap-2.5 border ${
+                  recoveryStatus.type === 'success'
+                    ? 'bg-emerald-950/80 border-emerald-800 text-emerald-200'
+                    : recoveryStatus.type === 'info'
+                    ? 'bg-blue-950/80 border-blue-800 text-blue-200'
+                    : 'bg-rose-950/80 border-rose-800 text-rose-200'
+                }`}
+              >
+                {recoveryStatus.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                ) : recoveryStatus.type === 'info' ? (
+                  <HelpCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                )}
+                <div className="leading-relaxed">{recoveryStatus.message}</div>
+              </div>
+            )}
+
+            <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Your Registered Work Email
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                  <input
+                    type="email"
+                    required
+                    autoFocus
+                    value={recoveryEmail}
+                    onChange={(e) => setRecoveryEmail(e.target.value)}
+                    placeholder="e.g. bolanle@offnotenergy.com"
+                    className="w-full pl-10 pr-3.5 py-2.5 text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSendingRecovery}
+                className="w-full mt-3 py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-semibold text-sm transition-all shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 group disabled:opacity-50 cursor-pointer"
+              >
+                {isSendingRecovery ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>Dispatching Recovery Email...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Send Recovery Instructions</span>
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="mt-6 pt-4 border-t border-slate-800 text-center">
+              <p className="text-[11px] text-slate-400">
+                You can also request a temporary passcode directly from <strong className="text-slate-200">Superadmin Francis Gabriel</strong>.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Card: Reset New Password (when arriving via Supabase link) */}
+        {viewState === 'reset_password' && (
+          <div className="mt-8 bg-slate-900/95 border border-slate-800/90 backdrop-blur-xl shadow-2xl rounded-2xl p-6 sm:p-8 animate-in fade-in duration-200">
+            <div className="mb-6">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-emerald-400" />
+                <span>Set New Password</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Enter and confirm your new secure password for your Offnot Energy account.
+              </p>
+            </div>
+
+            {error && (
+              <div className="mb-5 p-3 rounded-lg bg-rose-950/80 border border-rose-800 text-rose-200 text-xs flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {resetSuccess ? (
+              <div className="p-4 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-200 text-center space-y-2">
+                <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+                <h3 className="font-bold text-sm text-white">Password Updated!</h3>
+                <p className="text-xs text-emerald-300">
+                  Your new password has been securely updated. Redirecting to login...
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                    New Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                      <Lock className="h-4 w-4" />
+                    </div>
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      required
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Minimum 6 characters"
+                      className="w-full pl-10 pr-10 py-2.5 text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200"
+                    >
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Confirm New Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                      <Lock className="h-4 w-4" />
+                    </div>
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-type new password"
+                      className="w-full pl-10 pr-3.5 py-2.5 text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isUpdatingPassword}
+                  className="w-full mt-3 py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-all shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  {isUpdatingPassword ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      <span>Saving New Password...</span>
+                    </>
+                  ) : (
+                    <span>Update Password & Log In</span>
+                  )}
+                </button>
+              </form>
+            )}
+          </div>
+        )}
 
         {/* Footer */}
         <div className="mt-6 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
-          <span>Offnot Energy Business Management System</span>
+          <span>Offnot Energy Enterprise System</span>
           <span>•</span>
-          <span>Version 3.0 Clean Zero Ledger</span>
+          <span>Ibadan, Oyo State</span>
         </div>
       </div>
     </div>

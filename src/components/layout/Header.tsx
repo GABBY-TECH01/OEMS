@@ -13,6 +13,8 @@ import {
   Layers,
   Sparkles,
   Lock,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useApp, ActiveTab } from '../../context/AppContext';
 import { getRoleLabel } from '../../utils/formatters';
@@ -22,6 +24,7 @@ import { BRAND_LOGO_URL } from '../../constants/branding';
 export const Header: React.FC = () => {
   const {
     activeTab,
+    setActiveTab,
     currentUser,
     switchRole,
     notifications,
@@ -35,6 +38,8 @@ export const Header: React.FC = () => {
     canAccessAllBranches,
     logout,
     resetToZeroLedger,
+    theme,
+    toggleTheme,
   } = useApp();
 
   const [showRoleMenu, setShowRoleMenu] = useState(false);
@@ -203,6 +208,25 @@ export const Header: React.FC = () => {
                     </button>
                   );
                 })}
+
+                {currentUser.role === 'super_admin' && (
+                  <div className="pt-1.5 mt-1 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('branches');
+                        setShowBranchMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 rounded-lg flex items-center justify-between transition-colors"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Manage Branch Facilities Hub</span>
+                      </span>
+                      <span className="text-[10px] text-emerald-600 font-bold">Open →</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -297,6 +321,21 @@ export const Header: React.FC = () => {
             )}
           </div>
         )}
+
+        {/* Dark Mode Toggle Button */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center"
+          title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+          aria-label="Toggle dark mode"
+        >
+          {theme === 'dark' ? (
+            <Sun className="w-4 h-4 text-amber-400" />
+          ) : (
+            <Moon className="w-4 h-4 text-slate-600" />
+          )}
+        </button>
 
         {/* Notifications Dropdown */}
         <div className="relative">

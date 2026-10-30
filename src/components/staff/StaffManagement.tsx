@@ -35,6 +35,7 @@ export const StaffManagement: React.FC = () => {
     updateStaffAccount,
     toggleStaffStatus,
     deleteStaffAccount,
+    clearAllDemoStaff,
     branches,
     currentUser,
   } = useApp();
@@ -47,6 +48,10 @@ export const StaffManagement: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // In-App Deletion and Batch Clearing Modals State (avoid window.confirm in iframe)
+  const [deleteTargetStaff, setDeleteTargetStaff] = useState<StaffAccount | null>(null);
+  const [showClearAllModal, setShowClearAllModal] = useState<boolean>(false);
 
   // Dedicated Password Reset Modal State
   const [resetModalStaff, setResetModalStaff] = useState<StaffAccount | null>(null);
@@ -82,15 +87,15 @@ export const StaffManagement: React.FC = () => {
 
   const handleOpenCreate = () => {
     setEditingStaff(null);
-    const defaultBranch = branches[0];
+    const defaultBranch = branches[0] || { id: 'br_tipper_hq', name: 'Showroom - Tipper Garage (HQ)' };
     setFormData({
       name: '',
       username: '',
       email: '',
-      role: 'admin',
+      role: 'sales_rep',
       phone: '',
-      branchId: defaultBranch?.id || '',
-      branchName: defaultBranch?.name || '',
+      branchId: defaultBranch.id,
+      branchName: defaultBranch.name,
       temporaryPassword: `Offnot${Math.floor(1000 + Math.random() * 9000)}!`,
       status: 'active',
       hasFullSystemAccess: false,
@@ -130,20 +135,44 @@ export const StaffManagement: React.FC = () => {
     e.preventDefault();
     setFeedback(null);
 
+    const cleanName = formData.name.trim();
+    const cleanEmail = formData.email.trim().toLowerCase();
+    const cleanUsername = (formData.username || cleanEmail.split('@')[0] || '').trim().toLowerCase().replace(/\s+/g, '_');
+    const selectedBranch = branches.find(b => b.id === formData.branchId) || branches[0] || { id: 'br_tipper_hq', name: 'Showroom - Tipper Garage (HQ)' };
+
+    if (!cleanName) {
+      setFeedback({ type: 'error', text: 'Please enter the staff member\'s full name.' });
+      return;
+    }
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setFeedback({ type: 'error', text: 'Please provide a valid work email address.' });
+      return;
+    }
+
+    const payload = {
+      ...formData,
+      name: cleanName,
+      email: cleanEmail,
+      username: cleanUsername,
+      branchId: selectedBranch.id,
+      branchName: selectedBranch.name,
+      temporaryPassword: formData.temporaryPassword.trim() || `Offnot${Math.floor(1000 + Math.random() * 9000)}!`,
+    };
+
     if (editingStaff) {
-      const res = updateStaffAccount(editingStaff.id, formData);
+      const res = updateStaffAccount(editingStaff.id, payload);
       if (res.success) {
-        setFeedback({ type: 'success', text: `Updated staff profile for ${formData.name}.` });
+        setFeedback({ type: 'success', text: `Updated staff profile for ${payload.name}.` });
         setIsModalOpen(false);
       } else {
         setFeedback({ type: 'error', text: res.error || 'Failed to update staff.' });
       }
     } else {
-      const res = createStaffAccount(formData);
+      const res = createStaffAccount(payload);
       if (res.success) {
         setFeedback({
           type: 'success',
-          text: `Provisioned new account for ${formData.name} (${formData.role}). Ready for login.`,
+          text: `Provisioned account for ${payload.name} (${payload.role}). Temporary password: "${payload.temporaryPassword}". Ready for login!`,
         });
         setIsModalOpen(false);
       } else {
@@ -151,7 +180,7 @@ export const StaffManagement: React.FC = () => {
       }
     }
 
-    setTimeout(() => setFeedback(null), 4000);
+    setTimeout(() => setFeedback(null), 5000);
   };
 
   const handleCopyCredentials = (staff: StaffAccount) => {
@@ -205,34 +234,19 @@ export const StaffManagement: React.FC = () => {
 
   const handleDeleteStaff = (staff: StaffAccount) => {
     if (currentUser.role !== 'super_admin') {
-      alert('Only the system Super Administrator (Francis Gabriel) can delete staff members.');
+      setFeedback({ type: 'error', text: 'Only Superadmin Francis Gabriel has permission to delete staff profiles.' });
+      setTimeout(() => setFeedback(null), 4000);
       return;
     }
 
-    if (staff.id === currentUser.id || staff.role === 'super_admin') {
-      alert('You cannot delete the primary Super Administrator account.');
+    if (staff.id === currentUser.id || staff.role === 'super_admin' || staff.email.toLowerCase() === 'francisgabriel932@gmail.com') {
+      setFeedback({ type: 'error', text: 'The Super Administrator account cannot be deleted.' });
+      setTimeout(() => setFeedback(null), 4000);
       return;
     }
 
-    const confirmed = window.confirm(
-      `Are you sure you want to permanently delete the staff account for "${staff.name}" (${staff.username || staff.email})?\n\nThis will revoke all system credentials and permissions immediately.`
-    );
-
-    if (!confirmed) return;
-
-    const res = deleteStaffAccount(staff.id);
-    if (res.success) {
-      setFeedback({
-        type: 'success',
-        text: `Staff account "${staff.name}" has been permanently removed.`,
-      });
-    } else {
-      setFeedback({
-        type: 'error',
-        text: res.error || 'Failed to delete staff account.',
-      });
-    }
-    setTimeout(() => setFeedback(null), 4000);
+    // Opens custom in-app modal (never blocked by browser/iframe)
+    setDeleteTargetStaff(staff);
   };
 
   // Filtered List
@@ -311,14 +325,28 @@ export const StaffManagement: React.FC = () => {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleOpenCreate}
-          className="px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm transition-all flex items-center gap-2 self-start sm:self-auto"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Provision New Staff</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          {currentUser.role === 'super_admin' && staffAccounts.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setShowClearAllModal(true)}
+              className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 shadow-2xs transition-all flex items-center gap-1.5"
+              title="Delete all pre-filled demo accounts so you can add your real staff"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-amber-700" />
+              <span>Clear All Demo Staff</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleOpenCreate}
+            className="px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm transition-all flex items-center gap-2"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Provision New Staff</span>
+          </button>
+        </div>
       </div>
 
       {feedback && (
@@ -910,6 +938,155 @@ export const StaffManagement: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Single Staff Deletion Confirmation Modal */}
+      {deleteTargetStaff && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Delete Staff Account?</h3>
+                  <p className="text-xs text-slate-500">
+                    {deleteTargetStaff.name} ({deleteTargetStaff.username || deleteTargetStaff.email})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteTargetStaff(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <div className="p-3 bg-rose-50 border border-rose-200/80 rounded-xl text-xs text-rose-900 space-y-1">
+                <p className="font-semibold text-rose-800">
+                  Permanent Removal Warning
+                </p>
+                <p className="text-[11px] text-rose-800/90 leading-relaxed">
+                  This action cannot be undone. System credentials, branch permissions, and access privileges will be permanently revoked immediately.
+                </p>
+              </div>
+
+              <div className="text-xs text-slate-600 space-y-1">
+                <p><span className="font-semibold text-slate-800">Assigned Branch:</span> {deleteTargetStaff.branchName}</p>
+                <p><span className="font-semibold text-slate-800">Role:</span> {getRoleLabel(deleteTargetStaff.role)}</p>
+                <p><span className="font-semibold text-slate-800">Email:</span> {deleteTargetStaff.email}</p>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setDeleteTargetStaff(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const res = deleteStaffAccount(deleteTargetStaff.id);
+                    if (res.success) {
+                      setFeedback({
+                        type: 'success',
+                        text: `Staff account "${deleteTargetStaff.name}" has been permanently removed.`,
+                      });
+                    } else {
+                      setFeedback({
+                        type: 'error',
+                        text: res.error || 'Failed to delete staff account.',
+                      });
+                    }
+                    setDeleteTargetStaff(null);
+                    setTimeout(() => setFeedback(null), 4000);
+                  }}
+                  className="px-5 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Yes, Delete Account</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Batch Clear All Demo Accounts Modal */}
+      {showClearAllModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                  <RefreshCw className="w-5 h-5 text-amber-700" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Clear All Demo Staff?</h3>
+                  <p className="text-xs text-slate-500">
+                    Prepare roster for real employee onboarding
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowClearAllModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-xs text-amber-900 space-y-1">
+                <p className="font-semibold text-amber-800">
+                  Clean Slate Provisioning
+                </p>
+                <p className="text-[11px] text-amber-800/90 leading-relaxed">
+                  This will remove all demo test accounts across all branches. <strong>Superadmin Francis Gabriel</strong> will remain untouched, allowing you to immediately add your real staff.
+                </p>
+              </div>
+
+              <p className="text-xs text-slate-600">
+                Number of demo accounts to clear: <span className="font-bold text-slate-900">{staffAccounts.length - 1} staff profiles</span>.
+              </p>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowClearAllModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const res = clearAllDemoStaff();
+                    if (res.success) {
+                      setFeedback({
+                        type: 'success',
+                        text: `Cleared ${res.count} demo staff accounts! The roster is now ready for your real staff members.`,
+                      });
+                    }
+                    setShowClearAllModal(false);
+                    setTimeout(() => setFeedback(null), 5000);
+                  }}
+                  className="px-5 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Yes, Clear All Demo Accounts</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

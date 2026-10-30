@@ -65,11 +65,13 @@ export const MigrationViewer: React.FC = () => {
   const handleSaveCredentials = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputUrl.trim().startsWith('http')) {
-      alert('Invalid URL. Supabase Project URL must start with https://');
+      setSaveMessage('Error: Supabase Project URL must start with https://');
+      setTimeout(() => setSaveMessage(null), 4000);
       return;
     }
     if (!inputAnonKey.trim()) {
-      alert('Please enter your Supabase anon public key.');
+      setSaveMessage('Error: Please enter your Supabase anon public key.');
+      setTimeout(() => setSaveMessage(null), 4000);
       return;
     }
 
@@ -80,20 +82,19 @@ export const MigrationViewer: React.FC = () => {
       setTimeout(() => setSaveMessage(null), 4000);
       handleTestConnection();
     } else {
-      alert(res.error || 'Failed to save credentials.');
+      setSaveMessage(res.error || 'Failed to save credentials.');
+      setTimeout(() => setSaveMessage(null), 4000);
     }
   };
 
   const handleClearCredentials = () => {
-    if (window.confirm('Clear saved Supabase connection credentials?')) {
-      clearSupabaseCredentials();
-      setInputUrl('');
-      setInputAnonKey('');
-      setIsConfigured(false);
-      setTestResult(null);
-      setSaveMessage('Cleared Supabase credentials.');
-      setTimeout(() => setSaveMessage(null), 3000);
-    }
+    clearSupabaseCredentials();
+    setInputUrl('');
+    setInputAnonKey('');
+    setIsConfigured(false);
+    setTestResult(null);
+    setSaveMessage('Cleared Supabase credentials.');
+    setTimeout(() => setSaveMessage(null), 3000);
   };
 
   const handleTestConnection = async () => {

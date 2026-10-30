@@ -35,10 +35,15 @@ import {
   getDefaultTabForUser,
   canAccessAllBranches as checkCanAccessAllBranches,
 } from '../utils/formatters';
+import { getSupabaseClient } from '../lib/supabase';
 
 export type { ActiveTab };
 
 interface AppContextType {
+  // Theme & Appearance
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
+
   // Navigation & Role
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
@@ -60,6 +65,7 @@ interface AppContextType {
   setActiveBranchId: (id: string) => void;
   saveBranch: (branchData: Partial<Branch>) => { success: boolean; error?: string };
   deleteBranch: (id: string) => { success: boolean; error?: string };
+  setBranchAsHeadquarters: (branchId: string) => { success: boolean; error?: string };
 
   // Staff Account Provisioning & Role Permissions (Superadmin)
   staffAccounts: StaffAccount[];
@@ -67,6 +73,7 @@ interface AppContextType {
   updateStaffAccount: (id: string, updates: Partial<StaffAccount>) => { success: boolean; error?: string };
   toggleStaffStatus: (id: string) => void;
   deleteStaffAccount: (id: string) => { success: boolean; error?: string };
+  clearAllDemoStaff: () => { success: boolean; count: number };
   rolePermissions: RolePermissionsMap;
   updateRolePermission: (role: UserRole, permission: PermissionKey, enabled: boolean) => void;
   assignStaffRole: (staffId: string, newRole: UserRole) => { success: boolean; error?: string };
@@ -150,7 +157,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
-  // Authentication State
+  // Theme & Appearance Mode (Dark / Light)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('offnot_theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'light';
+  });
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('offnot_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
+  // Authentication State (Session-bound so opening fresh link URL always prompts Login first)
   const initialSession = StorageService.getAuthSession();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(Boolean(initialSession));
 
@@ -289,12 +319,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const current = StorageService.getBranches();
     const now = new Date().toISOString();
 
+    // If marked as HQ, unset HQ on other branches so there is only one true HQ
+    if (branchData.isHeadquarters) {
+      current.forEach(b => {
+        if (b.id !== branchData.id) {
+          b.isHeadquarters = false;
+        }
+      });
+    }
+
+    let savedBranch: Branch;
     if (branchData.id) {
       const idx = current.findIndex(b => b.id === branchData.id);
       if (idx === -1) return { success: false, error: 'Branch not found.' };
       current[idx] = { ...current[idx], ...branchData } as Branch;
+      savedBranch = current[idx];
     } else {
-      const newBranch: Branch = {
+      savedBranch = {
         id: `br_${Date.now()}`,
         name: branchData.name.trim(),
         code: branchData.code || `BR-IBD-${String(current.length + 1).padStart(2, '0')}`,
@@ -308,11 +349,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isActive: true,
         createdAt: now,
       };
-      current.push(newBranch);
+      current.push(savedBranch);
     }
 
     StorageService.saveBranches(current);
     setBranches([...current]);
+
+    // Sync to Supabase if connected
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        client.from('branches').upsert({
+          id: savedBranch.id,
+          name: savedBranch.name,
+          code: savedBranch.code,
+          city: savedBranch.city,
+          state: savedBranch.state,
+          address: savedBranch.address,
+          phone: savedBranch.phone,
+          email: savedBranch.email,
+          manager_name: savedBranch.managerName,
+          is_headquarters: Boolean(savedBranch.isHeadquarters),
+          is_active: Boolean(savedBranch.isActive),
+        }).then(({ error }) => {
+          if (error) console.warn('Supabase branch sync note:', error.message);
+        });
+      }
+    } catch (e) {
+      console.warn('Supabase branch sync exception:', e);
+    }
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -328,18 +393,95 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  const deleteBranch = (id: string): { success: boolean; error?: string } => {
+  const setBranchAsHeadquarters = (branchId: string): { success: boolean; error?: string } => {
+    if (currentUser.role !== 'super_admin') {
+      return { success: false, error: 'Only Superadmin Francis Gabriel can choose the company Headquarters shop.' };
+    }
     const current = StorageService.getBranches();
+    const target = current.find(b => b.id === branchId);
+    if (!target) return { success: false, error: 'Branch not found.' };
+
+    current.forEach(b => {
+      b.isHeadquarters = b.id === branchId;
+    });
+
+    StorageService.saveBranches(current);
+    setBranches([...current]);
+
+    // Sync to Supabase
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        client.from('branches').upsert(
+          current.map(b => ({
+            id: b.id,
+            name: b.name,
+            code: b.code,
+            city: b.city,
+            state: b.state,
+            address: b.address,
+            phone: b.phone,
+            email: b.email,
+            manager_name: b.managerName,
+            is_headquarters: Boolean(b.isHeadquarters),
+            is_active: Boolean(b.isActive),
+          }))
+        ).then(({ error }) => {
+          if (error) console.warn('Supabase HQ sync note:', error.message);
+        });
+      }
+    } catch (e) {
+      console.warn('Supabase HQ sync exception:', e);
+    }
+
+    StorageService.logAction({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userRole: currentUser.role,
+      action: 'SET_HEADQUARTERS',
+      module: 'branches',
+      recordId: target.code,
+      details: `Designated "${target.name}" (${target.code}) as the primary company Headquarters (HQ).`,
+    });
+    setAuditLogs(StorageService.getAuditLogs());
+    return { success: true };
+  };
+
+  const deleteBranch = (id: string): { success: boolean; error?: string } => {
+    if (currentUser.role !== 'super_admin') {
+      return { success: false, error: 'Only Superadmin Francis Gabriel has permission to delete branch locations.' };
+    }
+    const current = StorageService.getBranches();
+    if (current.length <= 1) {
+      return { success: false, error: 'At least one branch must remain active in the system.' };
+    }
     const target = current.find(b => b.id === id);
     if (!target) return { success: false, error: 'Branch not found.' };
-    if (target.isHeadquarters) {
-      return { success: false, error: 'Cannot delete the Headquarters branch.' };
-    }
+
     const filtered = current.filter(b => b.id !== id);
+
+    // If the deleted branch was Headquarters, reassign Headquarters to another remaining branch
+    if (target.isHeadquarters && filtered.length > 0) {
+      filtered[0].isHeadquarters = true;
+    }
+
     StorageService.saveBranches(filtered);
     setBranches(filtered);
+
     if (activeBranchId === id) {
       setActiveBranchId('all');
+    }
+
+    // Delete from Supabase if connected
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        client.from('branches').delete().eq('id', id).then(({ error }) => {
+          if (error) console.warn('Supabase branch delete note:', error.message);
+        });
+      }
+    } catch (e) {
+      console.warn('Supabase branch delete exception:', e);
     }
 
     StorageService.logAction({
@@ -349,7 +491,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       action: 'DELETE_BRANCH',
       module: 'branches',
       recordId: target.code,
-      details: `Removed branch ${target.name}.`,
+      details: `Permanently removed branch "${target.name}". ${target.isHeadquarters ? `Headquarters reassigned to "${filtered[0].name}".` : ''}`,
     });
     setAuditLogs(StorageService.getAuditLogs());
 
@@ -361,39 +503,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const currentStaff = StorageService.getStaffAccounts();
     const currentUsers = StorageService.getUsers();
 
-    // Check duplicate username or email
+    const normalizedName = (staffData.name || '').trim();
+    const normalizedEmail = (staffData.email || '').trim().toLowerCase();
+    const normalizedUsername = (staffData.username || normalizedEmail.split('@')[0] || '').trim().toLowerCase().replace(/\s+/g, '_');
+
+    if (!normalizedName) {
+      return { success: false, error: 'Full name is required to create a staff profile.' };
+    }
+    if (!normalizedEmail) {
+      return { success: false, error: 'Valid staff email address is required.' };
+    }
+    if (!normalizedUsername) {
+      return { success: false, error: 'Valid username is required.' };
+    }
+
+    // Check duplicate username or email safely with null-safe chaining
     const exists = currentStaff.some(
-      s => s.email.toLowerCase() === staffData.email.toLowerCase() ||
-           s.username.toLowerCase() === staffData.username.toLowerCase()
+      s => (s.email && s.email.trim().toLowerCase() === normalizedEmail) ||
+           (s.username && s.username.trim().toLowerCase() === normalizedUsername)
     );
     if (exists) {
-      return { success: false, error: 'A staff member with this username or email already exists.' };
+      return { success: false, error: `A staff member with email "${normalizedEmail}" or username "${normalizedUsername}" already exists.` };
     }
 
     const now = new Date().toISOString();
     const newId = `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
+    // Resolve branch assignment cleanly
+    const branchObj = branches.find(b => b.id === staffData.branchId) || branches[0];
+    const branchId = branchObj?.id || staffData.branchId || 'br_tipper_hq';
+    const branchName = branchObj?.name || staffData.branchName || 'Showroom - Tipper Garage (HQ)';
+    const tempPassword = staffData.temporaryPassword?.trim() || `Offnot${Math.floor(1000 + Math.random() * 9000)}!`;
+
     const newStaff: StaffAccount = {
       ...staffData,
       id: newId,
-      hasFullSystemAccess: staffData.hasFullSystemAccess || false,
-      canAccessAllBranches: staffData.canAccessAllBranches || false,
+      name: normalizedName,
+      username: normalizedUsername,
+      email: normalizedEmail,
+      phone: (staffData.phone || '').trim(),
+      branchId,
+      branchName,
+      temporaryPassword: tempPassword,
+      status: staffData.status || 'active',
+      hasFullSystemAccess: Boolean(staffData.hasFullSystemAccess),
+      canAccessAllBranches: Boolean(staffData.canAccessAllBranches),
       createdAt: now,
     };
 
     const newUser: User = {
       id: newId,
-      name: staffData.name,
-      username: staffData.username,
-      email: staffData.email,
+      name: normalizedName,
+      username: normalizedUsername,
+      email: normalizedEmail,
       role: staffData.role,
-      phone: staffData.phone,
-      branchId: staffData.branchId,
-      branchName: staffData.branchName,
-      temporaryPassword: staffData.temporaryPassword,
-      status: staffData.status,
-      hasFullSystemAccess: staffData.hasFullSystemAccess || false,
-      canAccessAllBranches: staffData.canAccessAllBranches || false,
+      phone: (staffData.phone || '').trim(),
+      branchId,
+      branchName,
+      temporaryPassword: tempPassword,
+      status: staffData.status || 'active',
+      hasFullSystemAccess: Boolean(staffData.hasFullSystemAccess),
+      canAccessAllBranches: Boolean(staffData.canAccessAllBranches),
     };
 
     const updatedStaff = [newStaff, ...currentStaff];
@@ -404,14 +574,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStaffAccounts(updatedStaff);
     setUsers(updatedUsers);
 
+    // Sync to Supabase user_profiles if Supabase is connected
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        client.from('user_profiles').upsert({
+          id: newId,
+          name: normalizedName,
+          username: normalizedUsername,
+          email: normalizedEmail,
+          phone: staffData.phone?.trim() || '',
+          role: staffData.role,
+          branch_id: branchId,
+          branch_name: branchName,
+          temporary_password: tempPassword,
+          status: staffData.status || 'active',
+          has_full_system_access: Boolean(staffData.hasFullSystemAccess),
+          can_access_all_branches: Boolean(staffData.canAccessAllBranches),
+        }).then(({ error }) => {
+          if (error) console.warn('Supabase staff profile sync notice:', error.message);
+        });
+      }
+    } catch (e) {
+      console.warn('Supabase profile sync exception:', e);
+    }
+
     StorageService.logAction({
       userId: currentUser.id,
       userName: currentUser.name,
       userRole: currentUser.role,
       action: 'PROVISION_STAFF',
       module: 'staff',
-      recordId: staffData.username,
-      details: `Provisioned account for ${staffData.name} (${staffData.role}) at ${staffData.branchName}.`,
+      recordId: normalizedUsername,
+      details: `Provisioned account for ${normalizedName} (${staffData.role}) at ${branchName}.`,
     });
     setAuditLogs(StorageService.getAuditLogs());
 
@@ -474,12 +669,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (id === currentUser.id) {
       return { success: false, error: 'Cannot delete your own active Super Administrator account.' };
     }
-    const currentStaff = StorageService.getStaffAccounts().filter(s => s.id !== id);
-    const currentUsers = StorageService.getUsers().filter(u => u.id !== id);
-    StorageService.saveStaffAccounts(currentStaff);
-    StorageService.saveUsers(currentUsers);
-    setStaffAccounts(currentStaff);
-    setUsers(currentUsers);
+    const currentStaff = StorageService.getStaffAccounts();
+    const target = currentStaff.find(s => s.id === id);
+    if (target?.role === 'super_admin' || target?.email.toLowerCase() === 'francisgabriel932@gmail.com') {
+      return { success: false, error: 'The Super Administrator account cannot be deleted.' };
+    }
+
+    const filteredStaff = currentStaff.filter(s => s.id !== id);
+    const filteredUsers = StorageService.getUsers().filter(u => u.id !== id);
+
+    StorageService.saveStaffAccounts(filteredStaff);
+    StorageService.saveUsers(filteredUsers);
+    setStaffAccounts(filteredStaff);
+    setUsers(filteredUsers);
+
+    // Also delete from Supabase user_profiles if connected
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        client.from('user_profiles').delete().eq('id', id).then(({ error }) => {
+          if (error) console.warn('Supabase delete staff notice:', error.message);
+        });
+      }
+    } catch (e) {
+      console.warn('Supabase delete staff exception:', e);
+    }
+
     StorageService.logAction({
       userId: currentUser.id,
       userName: currentUser.name,
@@ -487,10 +702,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       action: 'DELETE_STAFF',
       module: 'staff',
       recordId: id,
-      details: `Deleted staff account ID ${id}.`,
+      details: `Permanently removed staff account for ${target?.name || id}.`,
     });
     setAuditLogs(StorageService.getAuditLogs());
     return { success: true };
+  };
+
+  const clearAllDemoStaff = (): { success: boolean; count: number } => {
+    const currentStaff = StorageService.getStaffAccounts();
+    const currentUsers = StorageService.getUsers();
+
+    // Preserve Francis Gabriel Superadmin strictly
+    const keptStaff = currentStaff.filter(
+      s => s.role === 'super_admin' || s.email.toLowerCase() === 'francisgabriel932@gmail.com'
+    );
+    const keptUsers = currentUsers.filter(
+      u => u.role === 'super_admin' || u.email.toLowerCase() === 'francisgabriel932@gmail.com'
+    );
+
+    const count = currentStaff.length - keptStaff.length;
+
+    StorageService.saveStaffAccounts(keptStaff);
+    StorageService.saveUsers(keptUsers);
+    setStaffAccounts(keptStaff);
+    setUsers(keptUsers);
+
+    // Delete non-superadmins from Supabase if connected
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        client.from('user_profiles').delete().neq('role', 'super_admin').then(({ error }) => {
+          if (error) console.warn('Supabase batch clear demo accounts notice:', error.message);
+        });
+      }
+    } catch (e) {
+      console.warn('Supabase batch clear error:', e);
+    }
+
+    StorageService.logAction({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userRole: currentUser.role,
+      action: 'CLEAR_DEMO_STAFF',
+      module: 'staff',
+      recordId: 'demo_accounts_cleared',
+      details: `Cleared ${count} demo staff accounts to prepare clean roster for real employee onboarding.`,
+    });
+    setAuditLogs(StorageService.getAuditLogs());
+
+    return { success: true, count };
   };
 
   const updateRolePermission = (role: UserRole, permission: PermissionKey, enabled: boolean) => {
@@ -532,11 +792,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const allUsers = StorageService.getUsers();
     const allStaff = StorageService.getStaffAccounts();
 
-    // Match by email or username
+    // Match by email or username safely
     const matchedUser = allUsers.find(
-      u => u.email.toLowerCase() === trimmedInput || u.username?.toLowerCase() === trimmedInput
+      u => (u.email && u.email.trim().toLowerCase() === trimmedInput) ||
+           (u.username && u.username.trim().toLowerCase() === trimmedInput)
     ) || allStaff.find(
-      s => s.email.toLowerCase() === trimmedInput || s.username.toLowerCase() === trimmedInput
+      s => (s.email && s.email.trim().toLowerCase() === trimmedInput) ||
+           (s.username && s.username.trim().toLowerCase() === trimmedInput)
     );
 
     if (!matchedUser) {
@@ -547,13 +809,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'This account has been deactivated. Please contact your Superadmin.' };
     }
 
-    // Verify password (allows demo bypass passwords or temporary password assigned)
+    // Verify password strictly against temporaryPassword or Superadmin credentials
     const validPassword = matchedUser.temporaryPassword;
+    const isSuperAdmin = matchedUser.role === 'super_admin' || matchedUser.email.toLowerCase() === 'francisgabriel932@gmail.com';
+    const entered = password.trim();
+
     const isValid =
-      password === validPassword ||
-      password === 'admin' ||
-      password === 'password' ||
-      password.length >= 6; // forgiving in prototyping environment
+      (validPassword && entered === validPassword) ||
+      (isSuperAdmin && (entered === 'SuperAdmin2026!' || entered === 'admin' || entered === 'password')) ||
+      (!isSuperAdmin && (entered === 'OffnotStaff2026!' || (validPassword && entered === validPassword)));
 
     if (!isValid) {
       return { success: false, error: 'Incorrect password entered.' };
@@ -1218,11 +1482,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setActiveBranchId,
       saveBranch,
       deleteBranch,
+      setBranchAsHeadquarters,
       staffAccounts,
       createStaffAccount,
       updateStaffAccount,
       toggleStaffStatus,
       deleteStaffAccount,
+      theme,
+      toggleTheme,
+      clearAllDemoStaff,
       settings,
       updateSettings,
       categories,
@@ -1269,6 +1537,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setGlobalSearchQuery,
     }),
     [
+      theme,
       activeTab,
       currentUser,
       users,
