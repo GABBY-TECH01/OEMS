@@ -33,6 +33,12 @@ export interface MigrationFile {
 
 export const MIGRATION_FILES: MigrationFile[] = [
   {
+    filename: '06_incremental_handshake_patch.sql',
+    title: '⚡ Incremental Handshake & Multi-Device Patch',
+    description: 'Quick lightweight SQL patch to ensure RLS permissions and live two-way sync across laptop, mobile, and Vercel.',
+    category: 'security',
+  },
+  {
     filename: '05_complete_migration_single_file.sql',
     title: '⭐ Master All-in-One Supabase Migration',
     description: 'Complete standalone SQL script (tables, enums, triggers, RLS, and seed data) ready to paste into Supabase SQL Editor.',

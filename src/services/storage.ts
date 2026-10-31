@@ -1165,6 +1165,9 @@ export const StorageService = {
   getAuditLogs(): AuditLog[] {
     return getStorage<AuditLog[]>(STORAGE_KEYS.AUDIT_LOGS, []);
   },
+  saveAuditLogs(logs: AuditLog[]): void {
+    setStorage(STORAGE_KEYS.AUDIT_LOGS, logs);
+  },
   logAction(log: Omit<AuditLog, 'id' | 'timestamp'>): void {
     const logs = this.getAuditLogs();
     const newLog: AuditLog = {

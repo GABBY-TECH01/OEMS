@@ -15,6 +15,8 @@ import {
   Lock,
   Sun,
   Moon,
+  Database,
+  AlertTriangle,
 } from 'lucide-react';
 import { useApp, ActiveTab } from '../../context/AppContext';
 import { getRoleLabel } from '../../utils/formatters';
@@ -40,12 +42,17 @@ export const Header: React.FC = () => {
     resetToZeroLedger,
     theme,
     toggleTheme,
+    isSupabaseConnected,
+    supabaseLoading,
+    supabaseSyncTime,
+    syncWithSupabase,
   } = useApp();
 
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showBranchMenu, setShowBranchMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showZeroConfirmModal, setShowZeroConfirmModal] = useState(false);
 
   const unreadNotifications = notifications.filter(n => !n.read);
 
@@ -247,6 +254,41 @@ export const Header: React.FC = () => {
         </div>
       )}
 
+      {/* Supabase Cloud Live Database Handshake Pill */}
+      <div className="flex items-center">
+        {isSupabaseConnected ? (
+          <button
+            type="button"
+            onClick={() => syncWithSupabase()}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-all shadow-2xs"
+            title={`Supabase PostgreSQL Connected & In-Sync. Last synchronized at ${supabaseSyncTime || 'now'}. Click to pull latest data.`}
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <Database className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="hidden sm:inline">Supabase Live</span>
+            {supabaseLoading ? (
+              <RefreshCw className="w-3 h-3 animate-spin text-emerald-600 ml-0.5" />
+            ) : (
+              <span className="text-[9px] text-emerald-700/80 font-mono hidden md:inline">({supabaseSyncTime || 'Synced'})</span>
+            )}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setActiveTab('settings')}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-amber-800 bg-amber-50 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-lg hover:bg-amber-100 transition-all shadow-2xs"
+            title="Supabase live cloud database is not connected on this device. Click to configure credentials in Company Settings."
+          >
+            <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+            <Database className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            <span className="hidden sm:inline">Connect Supabase</span>
+          </button>
+        )}
+      </div>
+
       {/* Zone 3: Global Search Bar */}
       <div className="flex-1 max-w-sm hidden xl:block">
         <div className="relative">
@@ -431,21 +473,15 @@ export const Header: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        if (
-                          window.confirm(
-                            'Warning: Reset all sales, purchase orders, expenses, and transaction records to strict zero ledger (₦0.00)? Only Superadmin Francis Gabriel can execute this.'
-                          )
-                        ) {
-                          resetToZeroLedger();
-                          setShowUserMenu(false);
-                        }
+                        setShowZeroConfirmModal(true);
+                        setShowUserMenu(false);
                       }}
-                      className="w-full text-left px-3 py-2 text-xs text-amber-700 hover:bg-amber-50 flex items-center gap-2"
+                      className="w-full text-left px-3 py-2 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 flex items-center gap-2"
                     >
                       <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
                       <span>Reset to Clean Zero Ledger</span>
                     </button>
-                    <div className="border-t border-slate-100 my-1"></div>
+                    <div className="border-t border-slate-100 dark:border-slate-800 my-1"></div>
                   </>
                 )}
 
@@ -455,7 +491,7 @@ export const Header: React.FC = () => {
                     logout();
                     setShowUserMenu(false);
                   }}
-                  className="w-full text-left px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
+                  className="w-full text-left px-3 py-2 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2 font-medium"
                 >
                   <LogOut className="w-3.5 h-3.5 text-rose-600" />
                   <span>Sign Out</span>
@@ -467,6 +503,45 @@ export const Header: React.FC = () => {
           {/* Sign out is available in the user profile menu above and sidebar */}
         </div>
       </div>
+
+      {/* In-App Zero Ledger Confirmation Modal */}
+      {showZeroConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+            <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-950/70 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-2">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Reset to Clean Zero Ledger?</h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                This will reset all sales invoices, purchase orders, operating expenses, and inventory quantities to strict zero ledger (₦0.00).
+              </p>
+              <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 p-2 rounded-lg border border-amber-200 dark:border-amber-800">
+                Authorized action reserved for Superadmin Francis Gabriel.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowZeroConfirmModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  resetToZeroLedger();
+                  setShowZeroConfirmModal(false);
+                }}
+                className="px-4 py-2 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-sm"
+              >
+                Confirm Zero Ledger Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

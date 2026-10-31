@@ -16,11 +16,17 @@ import {
   Layers,
   ArrowRight,
   Upload,
+  Smartphone,
+  Laptop,
+  Globe,
+  CloudDownload,
+  Info,
 } from 'lucide-react';
 import { MIGRATION_FILES, MigrationFile } from '../../services/supabaseClient';
 import {
   getSupabaseUrl,
   getSupabaseAnonKey,
+  getSupabaseConfigSource,
   isSupabaseConfigured,
   saveSupabaseCredentials,
   clearSupabaseCredentials,
@@ -29,7 +35,7 @@ import {
 } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
 
-// Embedded SQL content for instant in-browser viewing, copy-pasting, and downloading
+import patchSql from '../../migration/06_incremental_handshake_patch.sql?raw';
 import masterSql from '../../migration/05_complete_migration_single_file.sql?raw';
 import schemaSql from '../../migration/01_schema.sql?raw';
 import triggersSql from '../../migration/02_triggers_and_functions.sql?raw';
@@ -37,9 +43,9 @@ import rlsSql from '../../migration/03_rls_security_rules.sql?raw';
 import seedSql from '../../migration/04_seed_data.sql?raw';
 
 export const MigrationViewer: React.FC = () => {
-  const { branches, users, categories, suppliers, products, customers, settings } = useApp();
+  const { branches, users, categories, suppliers, products, customers, settings, isSupabaseConnected, syncWithSupabase, supabaseSyncTime, supabaseLoading } = useApp();
 
-  const [selectedFile, setSelectedFile] = useState<string>('05_complete_migration_single_file.sql');
+  const [selectedFile, setSelectedFile] = useState<string>('06_incremental_handshake_patch.sql');
   const [copied, setCopied] = useState(false);
   const [inputUrl, setInputUrl] = useState<string>(getSupabaseUrl());
   const [inputAnonKey, setInputAnonKey] = useState<string>(getSupabaseAnonKey());
@@ -60,7 +66,16 @@ export const MigrationViewer: React.FC = () => {
     message?: string;
   } | null>(null);
 
+  const [pullStatus, setPullStatus] = useState<{
+    pulling: boolean;
+    success?: boolean;
+    message?: string;
+  } | null>(null);
+
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [copiedEnv, setCopiedEnv] = useState(false);
+
+  const configSource = getSupabaseConfigSource();
 
   const handleSaveCredentials = (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,8 +145,48 @@ export const MigrationViewer: React.FC = () => {
     }, 1000);
   };
 
+  const handlePullCloudData = async () => {
+    setPullStatus({ pulling: true });
+    try {
+      const ok = await syncWithSupabase();
+      if (ok) {
+        setPullStatus({
+          pulling: false,
+          success: true,
+          message: 'All 16 tables pulled from Supabase! Your system state is now 100% in sync with your cloud database.',
+        });
+      } else {
+        setPullStatus({
+          pulling: false,
+          success: false,
+          message: 'Could not pull data from Supabase. Please verify your Supabase URL, anon key, and ensure RLS allows read access.',
+        });
+      }
+    } catch (err: unknown) {
+      setPullStatus({
+        pulling: false,
+        success: false,
+        message: `Error pulling from Supabase: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+    setTimeout(() => {
+      setPullStatus(null);
+    }, 6000);
+  };
+
+  const handleCopyEnvVars = () => {
+    const url = inputUrl || getSupabaseUrl();
+    const key = inputAnonKey || getSupabaseAnonKey();
+    const envString = `VITE_SUPABASE_URL=${url}\nVITE_SUPABASE_ANON_KEY=${key}`;
+    navigator.clipboard.writeText(envString);
+    setCopiedEnv(true);
+    setTimeout(() => setCopiedEnv(false), 3000);
+  };
+
   const getSqlContent = (filename: string): string => {
     switch (filename) {
+      case '06_incremental_handshake_patch.sql':
+        return patchSql;
       case '05_complete_migration_single_file.sql':
         return masterSql;
       case '01_schema.sql':
@@ -143,7 +198,7 @@ export const MigrationViewer: React.FC = () => {
       case '04_seed_data.sql':
         return seedSql;
       default:
-        return masterSql;
+        return patchSql;
     }
   };
 
@@ -282,6 +337,79 @@ export const MigrationViewer: React.FC = () => {
         </div>
       </div>
 
+      {/* Vercel & Multi-Device Live Handshake Card */}
+      <div className="bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 text-white rounded-2xl border border-emerald-800/40 shadow-sm p-5 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0 mt-0.5">
+              <Globe className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">
+                  Multi-Device Cloud Handshake (Vercel &harr; Supabase &harr; Android &amp; Laptop)
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Universal Sync
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                Why your Android phone showed different data from your laptop: Saving credentials in the browser input only stores them in that single browser&apos;s local storage. To connect <strong>all phones, laptops, and tablets permanently</strong>, add the two variables below to your Vercel Project Settings.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleCopyEnvVars}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-all shadow-xs"
+            >
+              {copiedEnv ? <Check className="w-3.5 h-3.5 text-emerald-200" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedEnv ? 'Copied Env Vars!' : 'Copy Vercel Env Vars'}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 text-xs border-t border-slate-800/80">
+          <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-start gap-2.5">
+            <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-bold flex items-center justify-center shrink-0">
+              1
+            </div>
+            <div>
+              <p className="font-semibold text-slate-200">Open Vercel Settings</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Go to <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer" className="text-emerald-400 underline">vercel.com</a> ➔ Your Project ➔ <strong>Settings</strong> ➔ <strong>Environment Variables</strong>.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-start gap-2.5">
+            <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-bold flex items-center justify-center shrink-0">
+              2
+            </div>
+            <div>
+              <p className="font-semibold text-slate-200">Add the 2 Variables</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Paste <code className="text-emerald-300 font-mono">VITE_SUPABASE_URL</code> and <code className="text-emerald-300 font-mono">VITE_SUPABASE_ANON_KEY</code>. Check Production, Preview, &amp; Dev.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-start gap-2.5">
+            <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-bold flex items-center justify-center shrink-0">
+              3
+            </div>
+            <div>
+              <p className="font-semibold text-slate-200">Redeploy Latest Commit</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Go to Deployments ➔ Click <code className="font-mono text-slate-300">...</code> on your latest commit ➔ <strong>Redeploy</strong>. Every device now reads live Supabase!
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Supabase Live Credentials Configuration */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
@@ -295,7 +423,7 @@ export const MigrationViewer: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <span
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
                 isConfigured
@@ -305,6 +433,25 @@ export const MigrationViewer: React.FC = () => {
             >
               <span className={`w-2 h-2 rounded-full ${isConfigured ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
               <span>{isConfigured ? 'Supabase Configured' : 'Needs Configuration'}</span>
+            </span>
+
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+              {configSource === 'vercel_env' ? (
+                <>
+                  <Globe className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Vercel Env Active (All Devices)</span>
+                </>
+              ) : configSource === 'local_storage' ? (
+                <>
+                  <Laptop className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Browser Storage (This Device)</span>
+                </>
+              ) : (
+                <>
+                  <Server className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Default Config File</span>
+                </>
+              )}
             </span>
           </div>
         </div>
@@ -374,16 +521,29 @@ export const MigrationViewer: React.FC = () => {
               </button>
 
               {isConfigured && (
-                <button
-                  type="button"
-                  onClick={handleSyncToSupabase}
-                  disabled={syncStatus?.syncing}
-                  className="px-4 py-2 text-xs font-bold text-emerald-900 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50"
-                  title="Upload all local inventory products and branch structures to Supabase"
-                >
-                  <Upload className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>{syncStatus?.syncing ? 'Syncing to Supabase...' : 'Sync Local Data to Supabase'}</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePullCloudData}
+                    disabled={pullStatus?.pulling || supabaseLoading}
+                    className="px-4 py-2 text-xs font-bold text-sky-900 bg-sky-100 hover:bg-sky-200 border border-sky-300 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    title="Download and refresh all 16 tables live from Supabase into your UI"
+                  >
+                    <CloudDownload className={`w-3.5 h-3.5 text-sky-700 ${pullStatus?.pulling || supabaseLoading ? 'animate-bounce' : ''}`} />
+                    <span>{pullStatus?.pulling || supabaseLoading ? 'Pulling from Supabase...' : 'Pull Live Cloud Data'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSyncToSupabase}
+                    disabled={syncStatus?.syncing}
+                    className="px-4 py-2 text-xs font-bold text-emerald-900 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    title="Upload all local inventory products and branch structures to Supabase"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>{syncStatus?.syncing ? 'Syncing to Supabase...' : 'Sync Local Data to Supabase'}</span>
+                  </button>
+                </>
               )}
             </div>
 
@@ -399,15 +559,37 @@ export const MigrationViewer: React.FC = () => {
           </div>
         </form>
 
+        {pullStatus && (
+          <div
+            className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
+              pullStatus.success
+                ? 'bg-sky-50 border-sky-200 text-sky-950'
+                : 'bg-rose-50 border-rose-200 text-rose-900'
+            }`}
+          >
+            {pullStatus.success ? (
+              <CheckCircle2 className="w-4 h-4 text-sky-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{pullStatus.message}</span>
+          </div>
+        )}
+
         {syncStatus && (
           <div
-            className={`p-3 rounded-xl border text-xs font-medium ${
+            className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
               syncStatus.success
                 ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
                 : 'bg-rose-50 border-rose-200 text-rose-900'
             }`}
           >
-            {syncStatus.message}
+            {syncStatus.success ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{syncStatus.message}</span>
           </div>
         )}
 

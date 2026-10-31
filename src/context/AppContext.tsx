@@ -4,7 +4,7 @@
  * Currency: Nigerian Naira (₦)
  */
 
-import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Product,
   StockMovement,
@@ -35,7 +35,26 @@ import {
   getDefaultTabForUser,
   canAccessAllBranches as checkCanAccessAllBranches,
 } from '../utils/formatters';
-import { getSupabaseClient } from '../lib/supabase';
+import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
+import {
+  fetchAllDataFromSupabase,
+  saveProductToSupabase,
+  deleteProductFromSupabase,
+  saveBranchToSupabase,
+  deleteBranchFromSupabase,
+  saveSaleToSupabase,
+  saveCustomerToSupabase,
+  saveSupplierToSupabase,
+  savePurchaseOrderToSupabase,
+  saveQuotationToSupabase,
+  saveProjectToSupabase,
+  saveExpenseToSupabase,
+  saveStaffProfileToSupabase,
+  deleteStaffProfileFromSupabase,
+  saveStockMovementToSupabase,
+  saveSettingsToSupabase,
+  saveAuditLogToSupabase,
+} from '../services/supabaseDataService';
 
 export type { ActiveTab };
 
@@ -149,6 +168,13 @@ interface AppContextType {
   // Search
   globalSearchQuery: string;
   setGlobalSearchQuery: (q: string) => void;
+
+  // Live Supabase Cloud Database Handshake
+  isSupabaseConnected: boolean;
+  supabaseLoading: boolean;
+  supabaseSyncTime: string | null;
+  supabaseSyncError: string | null;
+  syncWithSupabase: () => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -207,10 +233,112 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [notifications, setNotifications] = useState<AppNotification[]>(StorageService.getNotifications());
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(StorageService.getAuditLogs());
 
+  // Live Supabase Cloud Database Status
+  const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(false);
+  const [supabaseLoading, setSupabaseLoading] = useState<boolean>(false);
+  const [supabaseSyncTime, setSupabaseSyncTime] = useState<string | null>(null);
+  const [supabaseSyncError, setSupabaseSyncError] = useState<string | null>(null);
+
+  const syncWithSupabase = useCallback(async (): Promise<boolean> => {
+    if (!isSupabaseConfigured()) {
+      setIsSupabaseConnected(false);
+      return false;
+    }
+
+    setSupabaseLoading(true);
+    setSupabaseSyncError(null);
+
+    try {
+      const cloudData = await fetchAllDataFromSupabase();
+      if (cloudData) {
+        if (cloudData.branches.length > 0) {
+          setBranches(cloudData.branches);
+          StorageService.saveBranches(cloudData.branches);
+        }
+        if (cloudData.products.length > 0) {
+          setProducts(cloudData.products);
+          StorageService.saveProducts(cloudData.products);
+        }
+        if (cloudData.sales.length > 0) {
+          setSales(cloudData.sales);
+          StorageService.saveSales(cloudData.sales);
+        }
+        if (cloudData.stockMovements.length > 0) {
+          setStockMovements(cloudData.stockMovements);
+          StorageService.saveStockMovements(cloudData.stockMovements);
+        }
+        if (cloudData.customers.length > 0) {
+          setCustomers(cloudData.customers);
+          StorageService.saveCustomers(cloudData.customers);
+        }
+        if (cloudData.suppliers.length > 0) {
+          setSuppliers(cloudData.suppliers);
+          StorageService.saveSuppliers(cloudData.suppliers);
+        }
+        if (cloudData.purchaseOrders.length > 0) {
+          setPurchaseOrders(cloudData.purchaseOrders);
+          StorageService.savePurchaseOrders(cloudData.purchaseOrders);
+        }
+        if (cloudData.quotations.length > 0) {
+          setQuotations(cloudData.quotations);
+          StorageService.saveQuotations(cloudData.quotations);
+        }
+        if (cloudData.projects.length > 0) {
+          setProjects(cloudData.projects);
+          StorageService.saveProjects(cloudData.projects);
+        }
+        if (cloudData.expenses.length > 0) {
+          setExpenses(cloudData.expenses);
+          StorageService.saveExpenses(cloudData.expenses);
+        }
+        if (cloudData.staffAccounts.length > 0) {
+          setStaffAccounts(cloudData.staffAccounts);
+          StorageService.saveStaffAccounts(cloudData.staffAccounts);
+        }
+        if (cloudData.users.length > 0) {
+          setUsers(cloudData.users);
+          StorageService.saveUsers(cloudData.users);
+        }
+        if (cloudData.settings) {
+          setSettings(cloudData.settings);
+          StorageService.saveSettings(cloudData.settings);
+        }
+        if (cloudData.auditLogs.length > 0) {
+          setAuditLogs(cloudData.auditLogs);
+          StorageService.saveAuditLogs(cloudData.auditLogs);
+        }
+        if (cloudData.notifications.length > 0) {
+          setNotifications(cloudData.notifications);
+          StorageService.saveNotifications(cloudData.notifications);
+        }
+
+        setIsSupabaseConnected(true);
+        const timeNow = new Date().toLocaleTimeString();
+        setSupabaseSyncTime(timeNow);
+        return true;
+      } else {
+        setIsSupabaseConnected(false);
+        setSupabaseSyncError('Connected to Supabase endpoint, but tables returned empty.');
+        return false;
+      }
+    } catch (err: any) {
+      console.warn('Supabase sync warning:', err);
+      setIsSupabaseConnected(false);
+      setSupabaseSyncError(err.message || 'Supabase handshake error');
+      return false;
+    } finally {
+      setSupabaseLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     StorageService.initDatabase();
     refreshData();
-  }, []);
+    // Immediate handshake with live Supabase database
+    if (isSupabaseConfigured()) {
+      syncWithSupabase();
+    }
+  }, [syncWithSupabase]);
 
   const refreshData = () => {
     setBranches(StorageService.getBranches());
@@ -225,6 +353,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentUserState(sess.user);
     } else {
       setCurrentUserState(StorageService.getCurrentUser());
+    }
+
+    // Also trigger cloud sync if connected
+    if (isSupabaseConfigured()) {
+      syncWithSupabase();
     }
 
     setProducts(StorageService.getProducts());
@@ -938,6 +1071,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveProduct = (productData: Partial<Product>) => {
     const currentProducts = StorageService.getProducts();
     const now = new Date().toISOString();
+    let savedProduct: Product;
 
     if (productData.id) {
       const index = currentProducts.findIndex(p => p.id === productData.id);
@@ -948,6 +1082,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...productData,
         updatedAt: now,
       } as Product;
+      savedProduct = currentProducts[index];
     } else {
       const newProduct: Product = {
         id: `prod_${Date.now()}`,
@@ -978,10 +1113,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedAt: now,
       };
       currentProducts.unshift(newProduct);
+      savedProduct = newProduct;
     }
 
     StorageService.saveProducts(currentProducts);
     setProducts([...currentProducts]);
+
+    // Live cloud persist
+    saveProductToSupabase(savedProduct).catch(err => {
+      console.warn('saveProductToSupabase error:', err);
+    });
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -1005,6 +1146,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const filtered = currentProducts.filter(p => p.id !== id);
     StorageService.saveProducts(filtered);
     setProducts(filtered);
+
+    // Live cloud delete
+    deleteProductFromSupabase(id).catch(err => {
+      console.warn('deleteProductFromSupabase error:', err);
+    });
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -1055,6 +1201,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser
     );
     if (res.success) {
+      if (res.sale) {
+        // Persist sale to Supabase
+        saveSaleToSupabase(res.sale).catch(err => {
+          console.warn('saveSaleToSupabase error:', err);
+        });
+      }
       refreshData();
     }
     return res;
@@ -1072,11 +1224,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveSupplier = (supplierData: Partial<Supplier>) => {
     const current = StorageService.getSuppliers();
     const now = new Date().toISOString();
+    let savedSup: Supplier;
 
     if (supplierData.id) {
       const idx = current.findIndex(s => s.id === supplierData.id);
       if (idx !== -1) {
         current[idx] = { ...current[idx], ...supplierData } as Supplier;
+        savedSup = current[idx];
+      } else {
+        return;
       }
     } else {
       const newSup: Supplier = {
@@ -1093,8 +1249,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         notes: supplierData.notes,
       };
       current.push(newSup);
+      savedSup = newSup;
     }
     StorageService.saveSuppliers(current);
+    setSuppliers([...current]);
+
+    // Live cloud persist
+    saveSupplierToSupabase(savedSup).catch(err => {
+      console.warn('saveSupplierToSupabase error:', err);
+    });
     setSuppliers([...current]);
 
     StorageService.logAction({
@@ -1140,6 +1303,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.savePurchaseOrders(current);
     setPurchaseOrders([...current]);
 
+    // Live cloud persist
+    savePurchaseOrderToSupabase(newPo).catch(err => {
+      console.warn('savePurchaseOrderToSupabase error:', err);
+    });
+
     StorageService.logAction({
       userId: currentUser.id,
       userName: currentUser.name,
@@ -1165,6 +1333,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       StorageService.savePurchaseOrders(current);
       setPurchaseOrders([...current]);
+
+      // Live cloud persist
+      savePurchaseOrderToSupabase(po).catch(err => {
+        console.warn('savePurchaseOrderToSupabase error:', err);
+      });
 
       StorageService.logAction({
         userId: currentUser.id,
@@ -1195,6 +1368,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       StorageService.savePurchaseOrders(current);
       setPurchaseOrders([...current]);
 
+      savePurchaseOrderToSupabase(po).catch(err => {
+        console.warn('savePurchaseOrderToSupabase payment error:', err);
+      });
+
       StorageService.logAction({
         userId: currentUser.id,
         userName: currentUser.name,
@@ -1212,11 +1389,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveCustomer = (custData: Partial<Customer>) => {
     const current = StorageService.getCustomers();
     const now = new Date().toISOString();
+    let savedCust: Customer;
 
     if (custData.id) {
       const idx = current.findIndex(c => c.id === custData.id);
       if (idx !== -1) {
         current[idx] = { ...current[idx], ...custData } as Customer;
+        savedCust = current[idx];
+      } else {
+        return;
       }
     } else {
       const newCust: Customer = {
@@ -1238,10 +1419,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: now,
       };
       current.push(newCust);
+      savedCust = newCust;
     }
 
     StorageService.saveCustomers(current);
     setCustomers([...current]);
+
+    // Live cloud persist
+    saveCustomerToSupabase(savedCust).catch(err => {
+      console.warn('saveCustomerToSupabase error:', err);
+    });
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -1260,10 +1447,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const current = StorageService.getQuotations();
     const now = new Date().toISOString();
 
+    let savedQ: Quotation;
     if (qData.id) {
       const idx = current.findIndex(q => q.id === qData.id);
       if (idx !== -1) {
         current[idx] = { ...current[idx], ...qData } as Quotation;
+        savedQ = current[idx];
+      } else {
+        return;
       }
     } else {
       const qNumber = `OFF-QT-${new Date().getFullYear()}-${1001 + current.length}`;
@@ -1293,10 +1484,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: now,
       };
       current.unshift(newQ);
+      savedQ = newQ;
     }
 
     StorageService.saveQuotations(current);
     setQuotations([...current]);
+
+    // Live cloud persist
+    saveQuotationToSupabase(savedQ).catch(err => {
+      console.warn('saveQuotationToSupabase error:', err);
+    });
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -1355,11 +1552,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveProject = (projectData: Partial<InstallationProject>) => {
     const current = StorageService.getProjects();
     const now = new Date().toISOString();
+    let savedPrj: InstallationProject;
 
     if (projectData.id) {
       const idx = current.findIndex(p => p.id === projectData.id);
       if (idx !== -1) {
         current[idx] = { ...current[idx], ...projectData } as InstallationProject;
+        savedPrj = current[idx];
+      } else {
+        return;
       }
     } else {
       const projectCode = `PRJ-IBD-${new Date().getFullYear()}-${String(current.length + 1).padStart(3, '0')}`;
@@ -1400,9 +1601,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: now,
       };
       current.unshift(newPrj);
+      savedPrj = newPrj;
     }
     StorageService.saveProjects(current);
     setProjects([...current]);
+
+    // Live cloud persist
+    saveProjectToSupabase(savedPrj).catch(err => {
+      console.warn('saveProjectToSupabase error:', err);
+    });
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -1451,6 +1658,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     current.unshift(newExp);
     StorageService.saveExpenses(current);
     setExpenses([...current]);
+
+    // Live cloud persist
+    saveExpenseToSupabase(newExp).catch(err => {
+      console.warn('saveExpenseToSupabase error:', err);
+    });
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -1535,6 +1747,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       assignStaffRole,
       globalSearchQuery,
       setGlobalSearchQuery,
+      // Live Supabase Handshake
+      isSupabaseConnected,
+      supabaseLoading,
+      supabaseSyncTime,
+      supabaseSyncError,
+      syncWithSupabase,
     }),
     [
       theme,
@@ -1568,6 +1786,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       auditLogs,
       rolePermissions,
       globalSearchQuery,
+      isSupabaseConnected,
+      supabaseLoading,
+      supabaseSyncTime,
+      supabaseSyncError,
+      syncWithSupabase,
     ]
   );
 

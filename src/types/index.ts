@@ -215,6 +215,8 @@ export interface PurchaseOrder {
   approvedBy?: string;
   expectedDeliveryDate?: string;
   warehouseLocation: string;
+  branchId?: string;
+  branchName?: string;
   notes?: string;
 }
 

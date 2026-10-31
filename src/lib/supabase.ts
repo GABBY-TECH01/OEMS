@@ -5,18 +5,40 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { DEFAULT_SUPABASE_CONFIG, SUPABASE_STORAGE_KEYS } from '../config/supabaseConfig';
 
 // Configuration keys in localStorage
-export const STORAGE_SUPABASE_URL_KEY = 'offnot_supabase_url';
-export const STORAGE_SUPABASE_ANON_KEY = 'offnot_supabase_anon_key';
+export const STORAGE_SUPABASE_URL_KEY = SUPABASE_STORAGE_KEYS.URL;
+export const STORAGE_SUPABASE_ANON_KEY = SUPABASE_STORAGE_KEYS.ANON_KEY;
+
+export type SupabaseConfigSource = 'local_storage' | 'vercel_env' | 'project_config' | 'none';
+
+export function getSupabaseConfigSource(): SupabaseConfigSource {
+  if (typeof window !== 'undefined') {
+    const local = localStorage.getItem(STORAGE_SUPABASE_URL_KEY);
+    if (local && local.trim().startsWith('http')) return 'local_storage';
+  }
+  const envVal = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+  if (envVal && envVal.startsWith('http')) return 'vercel_env';
+
+  if (DEFAULT_SUPABASE_CONFIG.url && DEFAULT_SUPABASE_CONFIG.url.startsWith('http') && !DEFAULT_SUPABASE_CONFIG.url.includes('placeholder')) {
+    return 'project_config';
+  }
+  return 'none';
+}
 
 export function getSupabaseUrl(): string {
   if (typeof window !== 'undefined') {
     const local = localStorage.getItem(STORAGE_SUPABASE_URL_KEY);
     if (local && local.trim().startsWith('http')) return local.trim();
   }
-  const envVal = import.meta.env.VITE_SUPABASE_URL || '';
-  return envVal.trim();
+  const envVal = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+  if (envVal && envVal.startsWith('http')) return envVal;
+
+  if (DEFAULT_SUPABASE_CONFIG.url && DEFAULT_SUPABASE_CONFIG.url.startsWith('http')) {
+    return DEFAULT_SUPABASE_CONFIG.url;
+  }
+  return '';
 }
 
 export function getSupabaseAnonKey(): string {
@@ -24,8 +46,13 @@ export function getSupabaseAnonKey(): string {
     const local = localStorage.getItem(STORAGE_SUPABASE_ANON_KEY);
     if (local && local.trim().length > 10) return local.trim();
   }
-  const envVal = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-  return envVal.trim();
+  const envVal = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  if (envVal && envVal.length > 10) return envVal;
+
+  if (DEFAULT_SUPABASE_CONFIG.anonKey && DEFAULT_SUPABASE_CONFIG.anonKey.length > 10) {
+    return DEFAULT_SUPABASE_CONFIG.anonKey;
+  }
+  return '';
 }
 
 export function isSupabaseConfigured(): boolean {
