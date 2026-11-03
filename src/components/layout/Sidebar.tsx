@@ -19,6 +19,7 @@ import {
   LogOut,
   Sun,
   Moon,
+  Target,
 } from 'lucide-react';
 import { useApp, ActiveTab } from '../../context/AppContext';
 import { getRoleLabel, getAllowedTabsForUser } from '../../utils/formatters';
@@ -64,6 +65,11 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
           id: 'dashboard',
           label: 'Dashboard Overview',
           icon: <LayoutDashboard className="w-4 h-4" />,
+        },
+        {
+          id: 'kpis',
+          label: 'Staff KPIs & Targets',
+          icon: <Target className="w-4 h-4 text-emerald-400" />,
         },
         {
           id: 'branches',

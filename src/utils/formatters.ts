@@ -145,6 +145,7 @@ export function getAllowedTabsForUser(user: { role: UserRole; hasFullSystemAcces
   if (user.role === 'super_admin' || (user.role === 'admin' && user.hasFullSystemAccess)) {
     return [
       'dashboard',
+      'kpis',
       'branches',
       'staff',
       'pos',
@@ -165,6 +166,7 @@ export function getAllowedTabsForUser(user: { role: UserRole; hasFullSystemAcces
     case 'admin':
       return [
         'dashboard',
+        'kpis',
         'pos',
         'inventory',
         'sales_history',
@@ -180,6 +182,7 @@ export function getAllowedTabsForUser(user: { role: UserRole; hasFullSystemAcces
     case 'ceo':
       return [
         'dashboard',
+        'kpis',
         'inventory',
         'sales_history',
         'purchasing',
@@ -194,6 +197,7 @@ export function getAllowedTabsForUser(user: { role: UserRole; hasFullSystemAcces
     case 'manager':
       return [
         'dashboard',
+        'kpis',
         'pos',
         'inventory',
         'sales_history',
@@ -206,23 +210,23 @@ export function getAllowedTabsForUser(user: { role: UserRole; hasFullSystemAcces
       ];
 
     case 'inventory_officer':
-      // Warehouse & inventory only
-      return ['inventory', 'purchasing'];
+      // Warehouse & inventory + KPIs
+      return ['kpis', 'inventory', 'purchasing'];
 
     case 'sales_rep':
-      // Dashboard removed; shopfloor sales focus only
-      return ['pos', 'sales_history', 'customers', 'quotations'];
+      // Shopfloor sales focus + KPIs
+      return ['kpis', 'pos', 'sales_history', 'customers', 'quotations'];
 
     case 'accountant':
-      // Financial oversight only
-      return ['dashboard', 'sales_history', 'finance', 'reports', 'quotations', 'purchasing'];
+      // Financial oversight + KPIs
+      return ['dashboard', 'kpis', 'sales_history', 'finance', 'reports', 'quotations', 'purchasing'];
 
     case 'technical_staff':
-      // Dashboard removed; field engineering & materials lookup
-      return ['projects', 'quotations', 'inventory'];
+      // Field engineering & materials lookup + KPIs
+      return ['kpis', 'projects', 'quotations', 'inventory'];
 
     default:
-      return ['dashboard'];
+      return ['dashboard', 'kpis'];
   }
 }
 

@@ -33,6 +33,12 @@ export interface MigrationFile {
 
 export const MIGRATION_FILES: MigrationFile[] = [
   {
+    filename: '07_kpi_and_auth_patch.sql',
+    title: '🏆 KPI Performance Hub & Password Fix Patch',
+    description: 'Creates staff_kpis and kpi_daily_logs tables with RLS policies, ensures password persistence, and enables live multi-device KPI logging.',
+    category: 'master',
+  },
+  {
     filename: '06_incremental_handshake_patch.sql',
     title: '⚡ Incremental Handshake & Multi-Device Patch',
     description: 'Quick lightweight SQL patch to ensure RLS permissions and live two-way sync across laptop, mobile, and Vercel.',

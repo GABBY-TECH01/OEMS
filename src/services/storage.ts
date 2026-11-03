@@ -29,6 +29,8 @@ import {
   PaymentRecord,
   PermissionKey,
   RolePermissionsMap,
+  StaffKpi,
+  KpiDailyLog,
 } from '../types';
 
 export const STORAGE_KEYS = {
@@ -51,6 +53,8 @@ export const STORAGE_KEYS = {
   ACTIVE_BRANCH_ID: 'offnot_active_branch_id_v3',
   AUTH_SESSION: 'offnot_auth_session_v3',
   ROLE_PERMISSIONS: 'offnot_role_permissions_v3',
+  STAFF_KPIS: 'offnot_staff_kpis_v3',
+  SUPERADMIN_PASSWORD: 'offnot_superadmin_password_v3',
 };
 
 export const INITIAL_ROLE_PERMISSIONS: RolePermissionsMap = {
@@ -992,15 +996,36 @@ export const StorageService = {
     setStorage(STORAGE_KEYS.ACTIVE_BRANCH_ID, id);
   },
 
+  getSuperadminPassword(): string {
+    return getStorage<string>(STORAGE_KEYS.SUPERADMIN_PASSWORD, 'SuperAdmin2026!');
+  },
+  setSuperadminPassword(pwd: string): void {
+    const clean = pwd.trim();
+    setStorage(STORAGE_KEYS.SUPERADMIN_PASSWORD, clean);
+    const users = getStorage<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const sa = users.find(u => u.id === 'usr_super_admin' || u.role === 'super_admin' || u.email.toLowerCase() === 'francisgabriel932@gmail.com');
+    if (sa) {
+      sa.temporaryPassword = clean;
+      setStorage(STORAGE_KEYS.USERS, users);
+    }
+    const staff = getStorage<StaffAccount[]>(STORAGE_KEYS.STAFF_ACCOUNTS, INITIAL_STAFF_ACCOUNTS);
+    const sSa = staff.find(s => s.id === 'usr_super_admin' || s.role === 'super_admin' || s.email.toLowerCase() === 'francisgabriel932@gmail.com');
+    if (sSa) {
+      sSa.temporaryPassword = clean;
+      setStorage(STORAGE_KEYS.STAFF_ACCOUNTS, staff);
+    }
+  },
+
   // Users & Staff
   getUsers(): User[] {
     const users = getStorage<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
-    const superAdmin = users.find(u => u.id === 'usr_super_admin' || u.role === 'super_admin');
+    const superAdmin = users.find(u => u.id === 'usr_super_admin' || u.role === 'super_admin' || u.email.toLowerCase() === 'francisgabriel932@gmail.com');
     if (superAdmin) {
       superAdmin.name = 'Francis Gabriel (Superadmin)';
       superAdmin.email = 'francisgabriel932@gmail.com';
       superAdmin.username = 'superadmin';
       superAdmin.role = 'super_admin';
+      superAdmin.temporaryPassword = this.getSuperadminPassword();
     }
     const adminUser = users.find(u => u.id === 'usr_admin');
     if (adminUser) {
@@ -1017,12 +1042,13 @@ export const StorageService = {
   },
   getStaffAccounts(): StaffAccount[] {
     const staff = getStorage<StaffAccount[]>(STORAGE_KEYS.STAFF_ACCOUNTS, INITIAL_STAFF_ACCOUNTS);
-    const superAdmin = staff.find(s => s.id === 'usr_super_admin' || s.role === 'super_admin');
+    const superAdmin = staff.find(s => s.id === 'usr_super_admin' || s.role === 'super_admin' || s.email.toLowerCase() === 'francisgabriel932@gmail.com');
     if (superAdmin) {
       superAdmin.name = 'Francis Gabriel (Superadmin)';
       superAdmin.email = 'francisgabriel932@gmail.com';
       superAdmin.username = 'superadmin';
       superAdmin.role = 'super_admin';
+      superAdmin.temporaryPassword = this.getSuperadminPassword();
     }
     const adminUser = staff.find(s => s.id === 'usr_admin');
     if (adminUser) {
@@ -1036,6 +1062,28 @@ export const StorageService = {
   },
   saveStaffAccounts(staff: StaffAccount[]): void {
     setStorage(STORAGE_KEYS.STAFF_ACCOUNTS, staff);
+    // Keep users list in sync with staff passwords
+    const users = getStorage<User[]>(STORAGE_KEYS.USERS, []);
+    staff.forEach(s => {
+      const u = users.find(usr => usr.id === s.id || usr.email.toLowerCase() === s.email.toLowerCase());
+      if (u) {
+        u.temporaryPassword = s.temporaryPassword;
+        u.name = s.name;
+        u.role = s.role;
+        u.branchId = s.branchId;
+        u.branchName = s.branchName;
+        u.status = s.status;
+      }
+    });
+    setStorage(STORAGE_KEYS.USERS, users);
+  },
+
+  // Staff KPIs
+  getStaffKpis(): StaffKpi[] {
+    return getStorage<StaffKpi[]>(STORAGE_KEYS.STAFF_KPIS, []);
+  },
+  saveStaffKpis(kpis: StaffKpi[]): void {
+    setStorage(STORAGE_KEYS.STAFF_KPIS, kpis);
   },
 
   getCurrentUser(): User {

@@ -28,6 +28,10 @@ import {
   PermissionKey,
   RolePermissionsMap,
   ActiveTab,
+  StaffKpi,
+  KpiDailyLog,
+  KpiStatus,
+  KpiPerformanceRating,
 } from '../types';
 import { StorageService, INITIAL_CATEGORIES } from '../services/storage';
 import {
@@ -54,6 +58,9 @@ import {
   saveStockMovementToSupabase,
   saveSettingsToSupabase,
   saveAuditLogToSupabase,
+  saveKpiToSupabase,
+  saveKpiDailyLogToSupabase,
+  deleteKpiFromSupabase,
 } from '../services/supabaseDataService';
 
 export type { ActiveTab };
@@ -71,10 +78,11 @@ interface AppContextType {
   setCurrentUser: (user: User) => void;
   switchRole: (role: UserRole) => void;
 
-  // Authentication
+  // Authentication & Security
   isAuthenticated: boolean;
   login: (usernameOrEmail: string, password: string) => { success: boolean; error?: string };
   logout: () => void;
+  changeSuperadminPassword: (newPassword: string) => { success: boolean; error?: string };
 
   // Multi-Branch Management & Cross-Store Isolation
   branches: Branch[];
@@ -96,6 +104,24 @@ interface AppContextType {
   rolePermissions: RolePermissionsMap;
   updateRolePermission: (role: UserRole, permission: PermissionKey, enabled: boolean) => void;
   assignStaffRole: (staffId: string, newRole: UserRole) => { success: boolean; error?: string };
+
+  // Staff KPIs & Targets Hub
+  staffKpis: StaffKpi[];
+  saveStaffKpi: (kpiData: Partial<StaffKpi>) => { success: boolean; error?: string };
+  updateStaffKpiSelfReview: (kpiId: string, updates: {
+    selfAssessmentNotes: string;
+    actualSalesAchieved?: number;
+    quotationsCreated?: number;
+    quotationsConverted?: number;
+    installationsCompleted?: number;
+  }) => { success: boolean; error?: string };
+  reviewStaffKpi: (kpiId: string, review: {
+    managerReviewNotes: string;
+    performanceRating: KpiPerformanceRating;
+    status: KpiStatus;
+  }) => { success: boolean; error?: string };
+  addKpiDailyLog: (kpiId: string, log: Omit<KpiDailyLog, 'id' | 'kpiId' | 'staffId' | 'createdAt'>) => { success: boolean; error?: string };
+  deleteStaffKpi: (kpiId: string) => { success: boolean; error?: string };
 
   // Data (Filtered automatically for non-superadmin store staff to isolate branches)
   settings: CompanySettings;
@@ -232,6 +258,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [expenses, setExpenses] = useState<Expense[]>(StorageService.getExpenses());
   const [notifications, setNotifications] = useState<AppNotification[]>(StorageService.getNotifications());
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(StorageService.getAuditLogs());
+  const [staffKpis, setStaffKpis] = useState<StaffKpi[]>(StorageService.getStaffKpis());
 
   // Live Supabase Cloud Database Status
   const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(false);
@@ -311,6 +338,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setNotifications(cloudData.notifications);
           StorageService.saveNotifications(cloudData.notifications);
         }
+        if (cloudData.staffKpis && cloudData.staffKpis.length > 0) {
+          setStaffKpis(cloudData.staffKpis);
+          StorageService.saveStaffKpis(cloudData.staffKpis);
+        }
 
         setIsSupabaseConnected(true);
         const timeNow = new Date().toLocaleTimeString();
@@ -371,6 +402,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setExpenses(StorageService.getExpenses());
     setNotifications(StorageService.getNotifications());
     setAuditLogs(StorageService.getAuditLogs());
+    setStaffKpis(StorageService.getStaffKpis());
   };
 
   const resetToZeroLedger = () => {
@@ -776,6 +808,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStaffAccounts([...currentStaff]);
     setUsers([...currentUsers]);
 
+    // Sync to Supabase user_profiles
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        const updated = currentStaff[staffIdx];
+        client.from('user_profiles').upsert({
+          id: updated.id,
+          name: updated.name,
+          username: updated.username,
+          email: updated.email,
+          phone: updated.phone || '',
+          role: updated.role,
+          branch_id: updated.branchId,
+          branch_name: updated.branchName,
+          status: updated.status,
+          temporary_password: updated.temporaryPassword,
+          has_full_system_access: Boolean(updated.hasFullSystemAccess),
+          can_access_all_branches: Boolean(updated.canAccessAllBranches),
+        }).then(({ error }) => {
+          if (error) console.warn('Supabase staff update notice:', error.message);
+        });
+      }
+    } catch (e) {
+      console.warn('Supabase staff update sync error:', e);
+    }
+
     StorageService.logAction({
       userId: currentUser.id,
       userName: currentUser.name,
@@ -934,6 +992,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
            (s.username && s.username.trim().toLowerCase() === trimmedInput)
     );
 
+    const matchedStaff = allStaff.find(
+      s => (s.email && s.email.trim().toLowerCase() === trimmedInput) ||
+           (s.username && s.username.trim().toLowerCase() === trimmedInput)
+    );
+
     if (!matchedUser) {
       return { success: false, error: 'No account found matching this username or email.' };
     }
@@ -942,15 +1005,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'This account has been deactivated. Please contact your Superadmin.' };
     }
 
-    // Verify password strictly against temporaryPassword or Superadmin credentials
-    const validPassword = matchedUser.temporaryPassword;
+    // Verify password strictly against temporaryPassword, custom superadmin password, or default fallbacks
+    const validPassword = matchedUser.temporaryPassword || matchedStaff?.temporaryPassword;
     const isSuperAdmin = matchedUser.role === 'super_admin' || matchedUser.email.toLowerCase() === 'francisgabriel932@gmail.com';
     const entered = password.trim();
+    const superadminCustomPwd = StorageService.getSuperadminPassword();
 
     const isValid =
       (validPassword && entered === validPassword) ||
-      (isSuperAdmin && (entered === 'SuperAdmin2026!' || entered === 'admin' || entered === 'password')) ||
-      (!isSuperAdmin && (entered === 'OffnotStaff2026!' || (validPassword && entered === validPassword)));
+      (matchedStaff?.temporaryPassword && entered === matchedStaff.temporaryPassword) ||
+      (isSuperAdmin && (
+        (superadminCustomPwd && entered === superadminCustomPwd) ||
+        entered === 'SuperAdmin2026!' ||
+        entered === 'admin' ||
+        entered === 'password'
+      )) ||
+      (!isSuperAdmin && (
+        entered === 'OffnotStaff2026!' ||
+        (validPassword && entered === validPassword)
+      ));
 
     if (!isValid) {
       return { success: false, error: 'Incorrect password entered.' };
@@ -966,7 +1039,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       branchId: matchedUser.branchId,
       branchName: matchedUser.branchName,
       status: matchedUser.status,
-      temporaryPassword: matchedUser.temporaryPassword,
+      temporaryPassword: validPassword || matchedUser.temporaryPassword,
       hasFullSystemAccess: matchedUser.hasFullSystemAccess,
       canAccessAllBranches: matchedUser.canAccessAllBranches,
     };
@@ -1003,6 +1076,277 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     setAuditLogs(StorageService.getAuditLogs());
 
+    return { success: true };
+  };
+
+  const changeSuperadminPassword = (newPassword: string): { success: boolean; error?: string } => {
+    if (!newPassword || newPassword.trim().length < 6) {
+      return { success: false, error: 'Password must be at least 6 characters long.' };
+    }
+    const cleanPassword = newPassword.trim();
+    StorageService.setSuperadminPassword(cleanPassword);
+
+    const currentStaff = StorageService.getStaffAccounts();
+    const currentUsers = StorageService.getUsers();
+
+    currentStaff.forEach(s => {
+      if (s.role === 'super_admin' || s.email.toLowerCase() === 'francisgabriel932@gmail.com') {
+        s.temporaryPassword = cleanPassword;
+      }
+    });
+    currentUsers.forEach(u => {
+      if (u.role === 'super_admin' || u.email.toLowerCase() === 'francisgabriel932@gmail.com') {
+        u.temporaryPassword = cleanPassword;
+      }
+    });
+
+    StorageService.saveStaffAccounts(currentStaff);
+    StorageService.saveUsers(currentUsers);
+    setStaffAccounts([...currentStaff]);
+    setUsers([...currentUsers]);
+
+    if (currentUser.role === 'super_admin' || currentUser.email.toLowerCase() === 'francisgabriel932@gmail.com') {
+      const updatedUser = { ...currentUser, temporaryPassword: cleanPassword };
+      setCurrentUserState(updatedUser);
+      const sess = StorageService.getAuthSession();
+      if (sess) {
+        StorageService.setAuthSession({ ...sess, user: updatedUser });
+      }
+    }
+
+    // Sync to Supabase user_profiles
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        client.from('user_profiles')
+          .update({ temporary_password: cleanPassword })
+          .or('role.eq.super_admin,email.eq.francisgabriel932@gmail.com')
+          .then(({ error }) => {
+            if (error) console.warn('Supabase superadmin password sync notice:', error.message);
+          });
+      }
+    } catch (e) {
+      console.warn('Supabase password sync exception:', e);
+    }
+
+    StorageService.logAction({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userRole: currentUser.role,
+      action: 'UPDATE_PASSWORD',
+      module: 'auth',
+      recordId: 'superadmin_password',
+      details: 'Super Administrator Francis Gabriel updated account password successfully.',
+    });
+    setAuditLogs(StorageService.getAuditLogs());
+
+    return { success: true };
+  };
+
+  // Staff KPI Management
+  const saveStaffKpi = (kpiData: Partial<StaffKpi>): { success: boolean; error?: string } => {
+    const currentKpis = StorageService.getStaffKpis();
+    const now = new Date().toISOString();
+
+    let savedKpi: StaffKpi;
+    if (kpiData.id) {
+      const idx = currentKpis.findIndex(k => k.id === kpiData.id);
+      if (idx === -1) return { success: false, error: 'KPI record not found.' };
+      currentKpis[idx] = { ...currentKpis[idx], ...kpiData, updatedAt: now };
+      savedKpi = currentKpis[idx];
+    } else {
+      if (!kpiData.staffId) {
+        return { success: false, error: 'Please select a staff member to assign this KPI.' };
+      }
+      const staffMember = staffAccounts.find(s => s.id === kpiData.staffId) || users.find(u => u.id === kpiData.staffId);
+      savedKpi = {
+        id: `kpi_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        staffId: kpiData.staffId,
+        staffName: staffMember?.name || kpiData.staffName || 'Staff Member',
+        staffRole: staffMember?.role || kpiData.staffRole || 'sales_rep',
+        branchId: kpiData.branchId || staffMember?.branchId || activeBranchId,
+        branchName: kpiData.branchName || staffMember?.branchName || 'Offnot Branch',
+        period: kpiData.period || new Date().toISOString().slice(0, 7),
+        monthlySalesTarget: Number(kpiData.monthlySalesTarget) || 2500000,
+        actualSalesAchieved: Number(kpiData.actualSalesAchieved) || 0,
+        grossProfitTarget: Number(kpiData.grossProfitTarget) || 500000,
+        actualGrossProfit: Number(kpiData.actualGrossProfit) || 0,
+        quotationsTarget: Number(kpiData.quotationsTarget) || 10,
+        quotationsCreated: Number(kpiData.quotationsCreated) || 0,
+        quotationsConverted: Number(kpiData.quotationsConverted) || 0,
+        installationsTarget: Number(kpiData.installationsTarget) || 4,
+        installationsCompleted: Number(kpiData.installationsCompleted) || 0,
+        stockAuditAccuracyPercent: Number(kpiData.stockAuditAccuracyPercent) || 100,
+        customerSatisfactionScore: Number(kpiData.customerSatisfactionScore) || 5,
+        attendancePunctualityPercent: Number(kpiData.attendancePunctualityPercent) || 100,
+        selfAssessmentNotes: kpiData.selfAssessmentNotes || '',
+        managerReviewNotes: kpiData.managerReviewNotes || '',
+        performanceRating: kpiData.performanceRating || 'Pending',
+        status: kpiData.status || 'active',
+        dailyLogs: kpiData.dailyLogs || [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      currentKpis.unshift(savedKpi);
+    }
+
+    StorageService.saveStaffKpis(currentKpis);
+    setStaffKpis([...currentKpis]);
+
+    saveKpiToSupabase(savedKpi).catch(e => console.warn('Supabase KPI sync note:', e));
+
+    StorageService.logAction({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userRole: currentUser.role,
+      action: kpiData.id ? 'UPDATE_KPI' : 'CREATE_KPI',
+      module: 'kpis',
+      recordId: savedKpi.id,
+      details: `${kpiData.id ? 'Updated' : 'Created'} KPI record for ${savedKpi.staffName} (${savedKpi.period}).`,
+    });
+    setAuditLogs(StorageService.getAuditLogs());
+
+    return { success: true };
+  };
+
+  const updateStaffKpiSelfReview = (
+    kpiId: string,
+    updates: {
+      selfAssessmentNotes: string;
+      actualSalesAchieved?: number;
+      quotationsCreated?: number;
+      quotationsConverted?: number;
+      installationsCompleted?: number;
+    }
+  ): { success: boolean; error?: string } => {
+    const currentKpis = StorageService.getStaffKpis();
+    const idx = currentKpis.findIndex(k => k.id === kpiId);
+    if (idx === -1) return { success: false, error: 'KPI record not found.' };
+
+    const target = currentKpis[idx];
+    const now = new Date().toISOString();
+
+    currentKpis[idx] = {
+      ...target,
+      selfAssessmentNotes: updates.selfAssessmentNotes,
+      actualSalesAchieved: updates.actualSalesAchieved !== undefined ? updates.actualSalesAchieved : target.actualSalesAchieved,
+      quotationsCreated: updates.quotationsCreated !== undefined ? updates.quotationsCreated : target.quotationsCreated,
+      quotationsConverted: updates.quotationsConverted !== undefined ? updates.quotationsConverted : target.quotationsConverted,
+      installationsCompleted: updates.installationsCompleted !== undefined ? updates.installationsCompleted : target.installationsCompleted,
+      status: target.status === 'active' ? 'under_review' : target.status,
+      lastUpdatedByStaffAt: now,
+      updatedAt: now,
+    };
+
+    StorageService.saveStaffKpis(currentKpis);
+    setStaffKpis([...currentKpis]);
+
+    saveKpiToSupabase(currentKpis[idx]).catch(e => console.warn('Supabase KPI sync note:', e));
+
+    StorageService.logAction({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userRole: currentUser.role,
+      action: 'UPDATE_KPI_SELF_REVIEW',
+      module: 'kpis',
+      recordId: kpiId,
+      details: `${currentUser.name} submitted KPI self-assessment for ${currentKpis[idx].period}.`,
+    });
+    setAuditLogs(StorageService.getAuditLogs());
+
+    return { success: true };
+  };
+
+  const reviewStaffKpi = (
+    kpiId: string,
+    review: {
+      managerReviewNotes: string;
+      performanceRating: KpiPerformanceRating;
+      status: KpiStatus;
+    }
+  ): { success: boolean; error?: string } => {
+    const currentKpis = StorageService.getStaffKpis();
+    const idx = currentKpis.findIndex(k => k.id === kpiId);
+    if (idx === -1) return { success: false, error: 'KPI record not found.' };
+
+    const target = currentKpis[idx];
+    const now = new Date().toISOString();
+
+    currentKpis[idx] = {
+      ...target,
+      managerReviewNotes: review.managerReviewNotes,
+      performanceRating: review.performanceRating,
+      status: review.status,
+      lastReviewedByManagerAt: now,
+      updatedAt: now,
+    };
+
+    StorageService.saveStaffKpis(currentKpis);
+    setStaffKpis([...currentKpis]);
+
+    saveKpiToSupabase(currentKpis[idx]).catch(e => console.warn('Supabase KPI sync note:', e));
+
+    StorageService.logAction({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userRole: currentUser.role,
+      action: 'REVIEW_KPI',
+      module: 'kpis',
+      recordId: kpiId,
+      details: `${currentUser.name} reviewed KPI for ${target.staffName} with rating "${review.performanceRating}".`,
+    });
+    setAuditLogs(StorageService.getAuditLogs());
+
+    return { success: true };
+  };
+
+  const addKpiDailyLog = (
+    kpiId: string,
+    log: Omit<KpiDailyLog, 'id' | 'kpiId' | 'staffId' | 'createdAt'>
+  ): { success: boolean; error?: string } => {
+    const currentKpis = StorageService.getStaffKpis();
+    const idx = currentKpis.findIndex(k => k.id === kpiId);
+    if (idx === -1) return { success: false, error: 'KPI record not found.' };
+
+    const target = currentKpis[idx];
+    const newLog: KpiDailyLog = {
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      kpiId,
+      staffId: target.staffId,
+      logDate: log.logDate || new Date().toISOString().slice(0, 10),
+      activitiesCompleted: log.activitiesCompleted,
+      itemsHandled: Number(log.itemsHandled) || 0,
+      revenueGenerated: Number(log.revenueGenerated) || 0,
+      challengesOrBlockers: log.challengesOrBlockers || '',
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedLogs = [newLog, ...(target.dailyLogs || [])];
+    const newActualSales = (target.actualSalesAchieved || 0) + (newLog.revenueGenerated || 0);
+
+    currentKpis[idx] = {
+      ...target,
+      dailyLogs: updatedLogs,
+      actualSalesAchieved: newActualSales,
+      updatedAt: new Date().toISOString(),
+    };
+
+    StorageService.saveStaffKpis(currentKpis);
+    setStaffKpis([...currentKpis]);
+
+    saveKpiToSupabase(currentKpis[idx]).catch(e => console.warn('Supabase KPI sync note:', e));
+    saveKpiDailyLogToSupabase(newLog).catch(e => console.warn('Supabase KPI log note:', e));
+
+    return { success: true };
+  };
+
+  const deleteStaffKpi = (kpiId: string): { success: boolean; error?: string } => {
+    const currentKpis = StorageService.getStaffKpis();
+    const filtered = currentKpis.filter(k => k.id !== kpiId);
+    StorageService.saveStaffKpis(filtered);
+    setStaffKpis(filtered);
+
+    deleteKpiFromSupabase(kpiId).catch(e => console.warn('Supabase KPI delete note:', e));
     return { success: true };
   };
 
@@ -1703,6 +2047,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       theme,
       toggleTheme,
       clearAllDemoStaff,
+      changeSuperadminPassword,
+      // Staff KPIs & Performance
+      staffKpis,
+      saveStaffKpi,
+      updateStaffKpiSelfReview,
+      reviewStaffKpi,
+      addKpiDailyLog,
+      deleteStaffKpi,
       settings,
       updateSettings,
       categories,
@@ -1765,6 +2117,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       userCanAccessAllBranches,
       effectiveBranchId,
       staffAccounts,
+      staffKpis,
       settings,
       categories,
       products,

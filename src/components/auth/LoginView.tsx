@@ -356,10 +356,10 @@ export const LoginView: React.FC = () => {
 
             <div className="mt-6 pt-4 border-t border-slate-800 text-center">
               <p className="text-[11px] text-slate-400">
-                Staff accounts and roles are administered by <strong className="text-slate-200">Superadmin Francis Gabriel</strong>.
+                Offnot Energy Portal &bull; Clean Energy, Stronger Tomorrow
               </p>
               <p className="text-[10px] text-slate-500 mt-1">
-                Need access? Contact management at Tipper Garage or your branch manager.
+                Authorized Staff Access Only &bull; Tipper Garage, Dalute Road, Ibadan
               </p>
             </div>
           </div>

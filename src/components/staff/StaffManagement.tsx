@@ -33,6 +33,7 @@ export const StaffManagement: React.FC = () => {
     staffAccounts,
     createStaffAccount,
     updateStaffAccount,
+    changeSuperadminPassword,
     toggleStaffStatus,
     deleteStaffAccount,
     clearAllDemoStaff,
@@ -207,20 +208,30 @@ export const StaffManagement: React.FC = () => {
     e.preventDefault();
     if (!resetModalStaff) return;
     if (!newPasswordValue.trim() || newPasswordValue.length < 6) {
-      alert('Password must be at least 6 characters.');
+      setFeedback({ type: 'error', text: 'Password must be at least 6 characters long.' });
+      setTimeout(() => setFeedback(null), 4000);
       return;
     }
 
+    const cleanPwd = newPasswordValue.trim();
+
+    // If target is Superadmin Francis Gabriel, also update global superadmin password
+    if (resetModalStaff.role === 'super_admin' || resetModalStaff.email.toLowerCase() === 'francisgabriel932@gmail.com') {
+      changeSuperadminPassword(cleanPwd);
+    }
+
     const res = updateStaffAccount(resetModalStaff.id, {
-      temporaryPassword: newPasswordValue.trim(),
+      temporaryPassword: cleanPwd,
     });
 
     if (res.success) {
-      const copyText = `Offnot Energy Password Reset\nStaff: ${resetModalStaff.name}\nUsername: ${resetModalStaff.username || resetModalStaff.email}\nNew Password: ${newPasswordValue.trim()}\nRole: ${resetModalStaff.role.replace('_', ' ')}`;
-      navigator.clipboard.writeText(copyText);
+      const copyText = `Offnot Energy Password Reset\nStaff: ${resetModalStaff.name}\nUsername: ${resetModalStaff.username || resetModalStaff.email}\nNew Password: ${cleanPwd}\nRole: ${resetModalStaff.role.replace('_', ' ')}`;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(copyText).catch(() => {});
+      }
       setFeedback({
         type: 'success',
-        text: `Password for ${resetModalStaff.name} reset to "${newPasswordValue.trim()}" and copied to clipboard!`,
+        text: `Password for ${resetModalStaff.name} updated to "${cleanPwd}" successfully!`,
       });
       setResetModalStaff(null);
     } else {

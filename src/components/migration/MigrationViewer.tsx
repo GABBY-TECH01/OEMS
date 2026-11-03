@@ -35,6 +35,7 @@ import {
 } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
 
+import kpiPatchSql from '../../migration/07_kpi_and_auth_patch.sql?raw';
 import patchSql from '../../migration/06_incremental_handshake_patch.sql?raw';
 import masterSql from '../../migration/05_complete_migration_single_file.sql?raw';
 import schemaSql from '../../migration/01_schema.sql?raw';
@@ -45,7 +46,7 @@ import seedSql from '../../migration/04_seed_data.sql?raw';
 export const MigrationViewer: React.FC = () => {
   const { branches, users, categories, suppliers, products, customers, settings, isSupabaseConnected, syncWithSupabase, supabaseSyncTime, supabaseLoading } = useApp();
 
-  const [selectedFile, setSelectedFile] = useState<string>('06_incremental_handshake_patch.sql');
+  const [selectedFile, setSelectedFile] = useState<string>('07_kpi_and_auth_patch.sql');
   const [copied, setCopied] = useState(false);
   const [inputUrl, setInputUrl] = useState<string>(getSupabaseUrl());
   const [inputAnonKey, setInputAnonKey] = useState<string>(getSupabaseAnonKey());
@@ -185,6 +186,8 @@ export const MigrationViewer: React.FC = () => {
 
   const getSqlContent = (filename: string): string => {
     switch (filename) {
+      case '07_kpi_and_auth_patch.sql':
+        return kpiPatchSql;
       case '06_incremental_handshake_patch.sql':
         return patchSql;
       case '05_complete_migration_single_file.sql':
@@ -239,6 +242,8 @@ export const MigrationViewer: React.FC = () => {
     { name: 'audit_logs', desc: 'Security audit trail & login records' },
     { name: 'app_notifications', desc: 'In-app alert dispatch records' },
     { name: 'company_settings', desc: 'Offnot Energy corporate profile' },
+    { name: 'staff_kpis', desc: 'Staff KPI targets, sales metrics & self-assessments' },
+    { name: 'kpi_daily_logs', desc: 'Daily staff accomplishment & activity logs' },
   ];
 
   return (

@@ -27,6 +27,8 @@ import {
   AuditLog,
   AppNotification,
   PaymentRecord,
+  StaffKpi,
+  KpiDailyLog,
 } from '../types';
 
 export interface SupabaseDataset {
@@ -45,6 +47,7 @@ export interface SupabaseDataset {
   settings: CompanySettings | null;
   auditLogs: AuditLog[];
   notifications: AppNotification[];
+  staffKpis: StaffKpi[];
 }
 
 // ============================================================================
@@ -73,6 +76,8 @@ export async function fetchAllDataFromSupabase(): Promise<SupabaseDataset | null
       settingsRes,
       auditRes,
       notifsRes,
+      kpisRes,
+      kpiLogsRes,
     ] = await Promise.all([
       client.from('branches').select('*').order('created_at', { ascending: true }),
       client.from('user_profiles').select('*').order('created_at', { ascending: true }),
@@ -88,6 +93,8 @@ export async function fetchAllDataFromSupabase(): Promise<SupabaseDataset | null
       client.from('company_settings').select('*').limit(1),
       client.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(100),
       client.from('app_notifications').select('*').order('created_at', { ascending: false }).limit(50),
+      client.from('staff_kpis').select('*').order('created_at', { ascending: false }),
+      client.from('kpi_daily_logs').select('*').order('created_at', { ascending: false }).limit(500),
     ]);
 
     // Map Branches
@@ -125,6 +132,7 @@ export async function fetchAllDataFromSupabase(): Promise<SupabaseDataset | null
         canAccessAllBranches: Boolean(u.can_access_all_branches),
         lastActive: u.last_active,
         avatar: u.avatar_url,
+        temporaryPassword: u.temporary_password || '',
       };
       users.push(userObj);
 
@@ -411,6 +419,51 @@ export async function fetchAllDataFromSupabase(): Promise<SupabaseDataset | null
       createdAt: n.created_at,
     }));
 
+    // Map KPI Daily Logs
+    const rawLogs: KpiDailyLog[] = (kpiLogsRes?.data || []).map((l: any) => ({
+      id: l.id,
+      kpiId: l.kpi_id,
+      staffId: l.staff_id,
+      logDate: l.log_date,
+      activitiesCompleted: l.activities_completed || '',
+      itemsHandled: Number(l.items_handled || 0),
+      revenueGenerated: Number(l.revenue_generated || 0),
+      challengesOrBlockers: l.challenges_or_blockers || undefined,
+      createdAt: l.created_at,
+    }));
+
+    // Map Staff KPIs
+    const staffKpis: StaffKpi[] = (kpisRes?.data || []).map((k: any) => ({
+      id: k.id,
+      staffId: k.staff_id,
+      staffName: k.staff_name,
+      staffRole: k.staff_role,
+      branchId: k.branch_id || undefined,
+      branchName: k.branch_name || undefined,
+      period: k.period || 'November 2026',
+      monthlySalesTarget: Number(k.monthly_sales_target || 0),
+      actualSalesAchieved: Number(k.actual_sales_achieved || 0),
+      grossProfitTarget: Number(k.gross_profit_target || 0),
+      actualGrossProfit: Number(k.actual_gross_profit || 0),
+      quotationsTarget: Number(k.quotations_target || 0),
+      quotationsCreated: Number(k.quotations_created || 0),
+      quotationsConverted: Number(k.quotations_converted || 0),
+      stockAuditAccuracyPercent: Number(k.stock_audit_accuracy_percent || 100),
+      installationsTarget: Number(k.installations_target || 0),
+      installationsCompleted: Number(k.installations_completed || 0),
+      customerSatisfactionScore: Number(k.customer_satisfaction_score || 5),
+      attendancePunctualityPercent: Number(k.attendance_punctuality_percent || 100),
+      status: k.status || 'active',
+      selfAssessmentNotes: k.self_assessment_notes || '',
+      managerReviewNotes: k.manager_review_notes || '',
+      performanceRating: k.performance_rating || 'Pending',
+      dailyLogs: rawLogs.filter(l => l.kpiId === k.id),
+      lastUpdatedByStaffAt: k.last_updated_by_staff_at || undefined,
+      lastReviewedByManagerAt: k.last_reviewed_by_manager_at || undefined,
+      createdAt: k.created_at,
+      updatedAt: k.updated_at,
+    }));
+
     return {
       branches,
       products,
@@ -427,6 +480,7 @@ export async function fetchAllDataFromSupabase(): Promise<SupabaseDataset | null
       settings,
       auditLogs,
       notifications,
+      staffKpis,
     };
   } catch (err) {
     console.error('Failed to fetch data from Supabase:', err);
@@ -934,3 +988,83 @@ export async function saveAuditLogToSupabase(log: AuditLog): Promise<void> {
     console.warn('Audit log Supabase write warning:', err);
   }
 }
+
+export async function saveKpiToSupabase(kpi: StaffKpi): Promise<{ success: boolean; error?: string }> {
+  const client = getSupabaseClient();
+  if (!client || !isSupabaseConfigured()) return { success: false, error: 'Supabase is not configured' };
+
+  try {
+    const row = {
+      id: kpi.id,
+      staff_id: kpi.staffId,
+      staff_name: kpi.staffName,
+      staff_role: kpi.staffRole,
+      branch_id: kpi.branchId || null,
+      branch_name: kpi.branchName || null,
+      period: kpi.period,
+      monthly_sales_target: kpi.monthlySalesTarget,
+      actual_sales_achieved: kpi.actualSalesAchieved,
+      gross_profit_target: kpi.grossProfitTarget,
+      actual_gross_profit: kpi.actualGrossProfit,
+      quotations_target: kpi.quotationsTarget,
+      quotations_created: kpi.quotationsCreated,
+      quotations_converted: kpi.quotationsConverted,
+      stock_audit_accuracy_percent: kpi.stockAuditAccuracyPercent,
+      installations_target: kpi.installationsTarget,
+      installations_completed: kpi.installationsCompleted,
+      customer_satisfaction_score: kpi.customerSatisfactionScore,
+      attendance_punctuality_percent: kpi.attendancePunctualityPercent,
+      status: kpi.status,
+      self_assessment_notes: kpi.selfAssessmentNotes,
+      manager_review_notes: kpi.managerReviewNotes,
+      performance_rating: kpi.performanceRating,
+      last_updated_by_staff_at: kpi.lastUpdatedByStaffAt || null,
+      last_reviewed_by_manager_at: kpi.lastReviewedByManagerAt || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await client.from('staff_kpis').upsert(row);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+export async function saveKpiDailyLogToSupabase(log: KpiDailyLog): Promise<{ success: boolean; error?: string }> {
+  const client = getSupabaseClient();
+  if (!client || !isSupabaseConfigured()) return { success: false, error: 'Supabase is not configured' };
+
+  try {
+    const row = {
+      id: log.id,
+      kpi_id: log.kpiId,
+      staff_id: log.staffId,
+      log_date: log.logDate,
+      activities_completed: log.activitiesCompleted,
+      items_handled: log.itemsHandled,
+      revenue_generated: log.revenueGenerated,
+      challenges_or_blockers: log.challengesOrBlockers || null,
+    };
+
+    const { error } = await client.from('kpi_daily_logs').upsert(row);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+export async function deleteKpiFromSupabase(kpiId: string): Promise<{ success: boolean; error?: string }> {
+  const client = getSupabaseClient();
+  if (!client || !isSupabaseConfigured()) return { success: false, error: 'Supabase is not configured' };
+
+  try {
+    const { error } = await client.from('staff_kpis').delete().eq('id', kpiId);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || String(err) };
+  }
+}
+

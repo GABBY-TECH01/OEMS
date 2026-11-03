@@ -25,6 +25,7 @@ import { Reports } from './components/reports/Reports';
 import { AuditLogs } from './components/audit/AuditLogs';
 import { Settings } from './components/settings/Settings';
 import { MigrationViewer } from './components/migration/MigrationViewer';
+import { KpiDashboard } from './components/kpis/KpiDashboard';
 import { getAllowedTabsForUser, getDefaultTabForUser } from './utils/formatters';
 
 const MainLayout: React.FC = () => {
@@ -52,6 +53,8 @@ const MainLayout: React.FC = () => {
         return <BranchManagement />;
       case 'staff':
         return <StaffManagement />;
+      case 'kpis':
+        return <KpiDashboard />;
       case 'inventory':
         return <Inventory />;
       case 'pos':

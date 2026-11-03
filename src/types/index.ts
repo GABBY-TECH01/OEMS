@@ -43,7 +43,8 @@ export type ActiveTab =
   | 'settings'
   | 'migrations'
   | 'branches'
-  | 'staff';
+  | 'staff'
+  | 'kpis';
 
 export type RolePermissionsMap = Record<UserRole, Record<PermissionKey, boolean>>;
 
@@ -449,7 +450,7 @@ export interface AuditLog {
   userName: string;
   userRole: UserRole;
   action: string;
-  module: 'inventory' | 'sales' | 'purchasing' | 'projects' | 'expenses' | 'settings' | 'auth' | 'customers' | 'branches' | 'staff';
+  module: 'inventory' | 'sales' | 'purchasing' | 'projects' | 'expenses' | 'settings' | 'auth' | 'customers' | 'branches' | 'staff' | 'kpis';
   recordId?: string;
   details: string;
   timestamp: string;
@@ -479,4 +480,57 @@ export interface CompanySettings {
   warehouses: string[];
   minGrossMarginPercent: number; // e.g. 10%
   receiptFooterMessage: string;
+}
+
+export type KpiStatus = 'active' | 'under_review' | 'completed' | 'exceeded';
+export type KpiPerformanceRating = 'A - Outstanding' | 'B - Exceeds Expectations' | 'C - Meets Expectations' | 'D - Needs Improvement' | 'Pending';
+
+export interface KpiDailyLog {
+  id: string;
+  kpiId: string;
+  staffId: string;
+  logDate: string;
+  activitiesCompleted: string;
+  itemsHandled: number;
+  revenueGenerated: number;
+  challengesOrBlockers?: string;
+  createdAt: string;
+}
+
+export interface StaffKpi {
+  id: string;
+  staffId: string;
+  staffName: string;
+  staffRole: UserRole;
+  branchId?: string;
+  branchName?: string;
+  period: string; // e.g. 'November 2026', '2026-Q4'
+  
+  // Financial Metrics (₦)
+  monthlySalesTarget: number;
+  actualSalesAchieved: number;
+  grossProfitTarget: number;
+  actualGrossProfit: number;
+  
+  // Operational Metrics
+  quotationsTarget: number;
+  quotationsCreated: number;
+  quotationsConverted: number;
+  stockAuditAccuracyPercent: number; // 0 - 100%
+  installationsTarget: number;
+  installationsCompleted: number;
+  customerSatisfactionScore: number; // 1.0 - 5.0
+  attendancePunctualityPercent: number; // 0 - 100%
+  
+  // Assessment
+  status: KpiStatus;
+  selfAssessmentNotes: string;
+  managerReviewNotes: string;
+  performanceRating: KpiPerformanceRating;
+  
+  dailyLogs?: KpiDailyLog[];
+  lastUpdatedByStaffAt?: string;
+  lastReviewedByManagerAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }

@@ -17,6 +17,10 @@ import {
   Moon,
   Database,
   AlertTriangle,
+  KeyRound,
+  Eye,
+  EyeOff,
+  X,
 } from 'lucide-react';
 import { useApp, ActiveTab } from '../../context/AppContext';
 import { getRoleLabel } from '../../utils/formatters';
@@ -40,6 +44,8 @@ export const Header: React.FC = () => {
     canAccessAllBranches,
     logout,
     resetToZeroLedger,
+    changeSuperadminPassword,
+    updateStaffAccount,
     theme,
     toggleTheme,
     isSupabaseConnected,
@@ -53,6 +59,10 @@ export const Header: React.FC = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showZeroConfirmModal, setShowZeroConfirmModal] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [showPwdText, setShowPwdText] = useState(false);
+  const [passwordFeedback, setPasswordFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const unreadNotifications = notifications.filter(n => !n.read);
 
@@ -60,6 +70,8 @@ export const Header: React.FC = () => {
     switch (tab) {
       case 'dashboard':
         return 'Executive Overview';
+      case 'kpis':
+        return 'Staff KPIs & Performance Hub';
       case 'branches':
         return 'Multi-Branch Operations';
       case 'staff':
@@ -468,6 +480,20 @@ export const Header: React.FC = () => {
               </div>
 
               <div className="py-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowChangePasswordModal(true);
+                    setNewPasswordInput('');
+                    setPasswordFeedback(null);
+                    setShowUserMenu(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Change Password</span>
+                </button>
+
                 {currentUser.role === 'super_admin' && (
                   <>
                     <button
@@ -503,6 +529,116 @@ export const Header: React.FC = () => {
           {/* Sign out is available in the user profile menu above and sidebar */}
         </div>
       </div>
+
+      {/* In-App Change Password Modal */}
+      {showChangePasswordModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 flex items-center justify-center">
+                  <KeyRound className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    {currentUser.role === 'super_admin' ? 'Change Superadmin Password' : 'Change Password'}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{currentUser.name} ({currentUser.email})</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowChangePasswordModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {passwordFeedback && (
+              <div
+                className={`p-3 rounded-lg text-xs font-medium border ${
+                  passwordFeedback.type === 'success'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-300'
+                    : 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/50 dark:border-rose-800 dark:text-rose-300'
+                }`}
+              >
+                {passwordFeedback.text}
+              </div>
+            )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const pwd = newPasswordInput.trim();
+                if (!pwd || pwd.length < 6) {
+                  setPasswordFeedback({ type: 'error', text: 'Password must be at least 6 characters long.' });
+                  return;
+                }
+
+                if (currentUser.role === 'super_admin' || currentUser.email.toLowerCase() === 'francisgabriel932@gmail.com') {
+                  const res = changeSuperadminPassword(pwd);
+                  if (res.success) {
+                    setPasswordFeedback({ type: 'success', text: 'Superadmin password updated and synced to Supabase!' });
+                    setTimeout(() => setShowChangePasswordModal(false), 2000);
+                  } else {
+                    setPasswordFeedback({ type: 'error', text: res.error || 'Failed to update password' });
+                  }
+                } else {
+                  const res = updateStaffAccount(currentUser.id, { temporaryPassword: pwd });
+                  if (res.success) {
+                    setPasswordFeedback({ type: 'success', text: 'Password updated successfully!' });
+                    setTimeout(() => setShowChangePasswordModal(false), 2000);
+                  } else {
+                    setPasswordFeedback({ type: 'error', text: res.error || 'Failed to update password' });
+                  }
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  New Password (min. 6 characters) *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPwdText ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={newPasswordInput}
+                    onChange={(e) => setNewPasswordInput(e.target.value)}
+                    placeholder="Enter new password"
+                    className="w-full pl-3 pr-10 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-slate-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwdText(!showPwdText)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                  >
+                    {showPwdText ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowChangePasswordModal(false)}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm"
+                >
+                  Save New Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* In-App Zero Ledger Confirmation Modal */}
       {showZeroConfirmModal && (
