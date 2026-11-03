@@ -37,8 +37,11 @@ CREATE TABLE IF NOT EXISTS staff_kpis (
   customer_satisfaction_score NUMERIC(3, 2) NOT NULL DEFAULT 5.00,
   attendance_punctuality_percent NUMERIC(5, 2) NOT NULL DEFAULT 100.00,
   
-  -- Assessment & Governance
-  status VARCHAR(30) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'under_review', 'completed', 'exceeded')),
+  -- Assessment & Acceptance Governance
+  status VARCHAR(30) NOT NULL DEFAULT 'pending_acceptance',
+  accepted_at TIMESTAMPTZ,
+  accepted_by_staff_id TEXT,
+  acceptance_notes TEXT,
   self_assessment_notes TEXT DEFAULT '',
   manager_review_notes TEXT DEFAULT '',
   performance_rating VARCHAR(50) NOT NULL DEFAULT 'Pending',
@@ -48,6 +51,18 @@ CREATE TABLE IF NOT EXISTS staff_kpis (
   created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
 );
+
+-- Ensure acceptance columns exist if table was already created
+ALTER TABLE IF EXISTS staff_kpis
+  ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS accepted_by_staff_id TEXT,
+  ADD COLUMN IF NOT EXISTS acceptance_notes TEXT,
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc', now());
+
+-- Update status constraint to include 'pending_acceptance'
+ALTER TABLE IF EXISTS staff_kpis DROP CONSTRAINT IF EXISTS staff_kpis_status_check;
+ALTER TABLE IF EXISTS staff_kpis ADD CONSTRAINT staff_kpis_status_check 
+  CHECK (status IN ('pending_acceptance', 'active', 'under_review', 'completed', 'exceeded'));
 
 -- Step 3: Create KPI Daily Activity Logs Table
 CREATE TABLE IF NOT EXISTS kpi_daily_logs (

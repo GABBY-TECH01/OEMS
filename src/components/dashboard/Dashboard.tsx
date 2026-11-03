@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   TrendingUp,
-  DollarSign,
+  Wallet,
   Package,
   AlertTriangle,
   ShoppingCart,

@@ -11,7 +11,7 @@ import {
   TrendingUp,
   Package,
   Layers,
-  CircleDollarSign,
+  Wallet,
   AlertTriangle,
   ArrowRight,
   CheckCircle,

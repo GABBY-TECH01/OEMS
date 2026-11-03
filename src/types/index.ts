@@ -482,7 +482,7 @@ export interface CompanySettings {
   receiptFooterMessage: string;
 }
 
-export type KpiStatus = 'active' | 'under_review' | 'completed' | 'exceeded';
+export type KpiStatus = 'pending_acceptance' | 'active' | 'under_review' | 'completed' | 'exceeded';
 export type KpiPerformanceRating = 'A - Outstanding' | 'B - Exceeds Expectations' | 'C - Meets Expectations' | 'D - Needs Improvement' | 'Pending';
 
 export interface KpiDailyLog {
@@ -522,8 +522,11 @@ export interface StaffKpi {
   customerSatisfactionScore: number; // 1.0 - 5.0
   attendancePunctualityPercent: number; // 0 - 100%
   
-  // Assessment
+  // Assessment & Acceptance Workflow
   status: KpiStatus;
+  acceptedAt?: string;
+  acceptedByStaffId?: string;
+  acceptanceNotes?: string;
   selfAssessmentNotes: string;
   managerReviewNotes: string;
   performanceRating: KpiPerformanceRating;

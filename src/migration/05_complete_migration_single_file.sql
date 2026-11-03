@@ -433,6 +433,53 @@ CREATE TABLE IF NOT EXISTS app_notifications (
   created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
 );
 
+-- 17. Staff Performance Targets & Monthly KPIs
+CREATE TABLE IF NOT EXISTS staff_kpis (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  staff_id TEXT NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+  staff_name VARCHAR(255) NOT NULL,
+  staff_role VARCHAR(50) NOT NULL,
+  branch_id TEXT REFERENCES branches(id) ON DELETE SET NULL,
+  branch_name VARCHAR(255),
+  period VARCHAR(50) NOT NULL,
+  monthly_sales_target NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  actual_sales_achieved NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  gross_profit_target NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  actual_gross_profit NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  quotations_target INT NOT NULL DEFAULT 0,
+  quotations_created INT NOT NULL DEFAULT 0,
+  quotations_converted INT NOT NULL DEFAULT 0,
+  stock_audit_accuracy_percent NUMERIC(5, 2) NOT NULL DEFAULT 100.00,
+  installations_target INT NOT NULL DEFAULT 0,
+  installations_completed INT NOT NULL DEFAULT 0,
+  customer_satisfaction_score NUMERIC(3, 2) NOT NULL DEFAULT 5.00,
+  attendance_punctuality_percent NUMERIC(5, 2) NOT NULL DEFAULT 100.00,
+  status VARCHAR(30) NOT NULL DEFAULT 'pending_acceptance' CHECK (status IN ('pending_acceptance', 'active', 'under_review', 'completed', 'exceeded')),
+  accepted_at TIMESTAMPTZ,
+  accepted_by_staff_id TEXT,
+  acceptance_notes TEXT,
+  self_assessment_notes TEXT DEFAULT '',
+  manager_review_notes TEXT DEFAULT '',
+  performance_rating VARCHAR(50) NOT NULL DEFAULT 'Pending',
+  last_updated_by_staff_at TIMESTAMPTZ,
+  last_reviewed_by_manager_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
+);
+
+-- 18. Staff Daily Work Logs
+CREATE TABLE IF NOT EXISTS kpi_daily_logs (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  kpi_id TEXT NOT NULL REFERENCES staff_kpis(id) ON DELETE CASCADE,
+  staff_id TEXT NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+  log_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  activities_completed TEXT NOT NULL,
+  items_handled INT NOT NULL DEFAULT 0,
+  revenue_generated NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+  challenges_or_blockers TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
+);
+
 -- =====================================================================
 -- Step 4: Performance Indexes
 -- =====================================================================
@@ -443,6 +490,9 @@ CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_products_branch ON products(branch_id);
 CREATE INDEX IF NOT EXISTS idx_sales_invoice ON sales(invoice_number);
 CREATE INDEX IF NOT EXISTS idx_sales_branch ON sales(branch_id);
+CREATE INDEX IF NOT EXISTS idx_staff_kpis_staff_id ON staff_kpis(staff_id);
+CREATE INDEX IF NOT EXISTS idx_staff_kpis_period ON staff_kpis(period);
+CREATE INDEX IF NOT EXISTS idx_kpi_daily_logs_kpi_id ON kpi_daily_logs(kpi_id);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_prod ON stock_movements(product_id);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_time ON stock_movements(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
@@ -506,6 +556,8 @@ ALTER TABLE installation_projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE staff_kpis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE kpi_daily_logs ENABLE ROW LEVEL SECURITY;
 
 -- Permissive policy for all tables to allow the client app to operate smoothly
 DO $$
@@ -528,7 +580,9 @@ BEGIN
     'installation_projects',
     'expenses',
     'audit_logs',
-    'app_notifications'
+    'app_notifications',
+    'staff_kpis',
+    'kpi_daily_logs'
   ]) LOOP
     EXECUTE format('
       DROP POLICY IF EXISTS "Allow all for authenticated and anon" ON %I;

@@ -8,7 +8,7 @@ import {
   Mail,
   MapPin,
   Award,
-  DollarSign,
+  Wallet,
   Briefcase,
   ChevronRight,
   UserCheck,
@@ -134,7 +134,7 @@ export const Customers: React.FC = () => {
           label="Total Customer Receivables"
           value={formatNaira(totalReceivables)}
           subValue="Outstanding customer balances in Ibadan"
-          icon={<DollarSign className="w-4 h-4 text-amber-600" />}
+          icon={<Wallet className="w-4 h-4 text-amber-600" />}
           variant="amber"
         />
         <StatCard

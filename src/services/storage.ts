@@ -916,6 +916,9 @@ export const StorageService = {
     if (!localStorage.getItem(STORAGE_KEYS.ROLE_PERMISSIONS)) {
       setStorage(STORAGE_KEYS.ROLE_PERMISSIONS, INITIAL_ROLE_PERMISSIONS);
     }
+    if (!localStorage.getItem(STORAGE_KEYS.STAFF_KPIS)) {
+      setStorage(STORAGE_KEYS.STAFF_KPIS, []);
+    }
   },
 
   // Reset strictly to Clean Zero Ledger

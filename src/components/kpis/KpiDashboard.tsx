@@ -15,7 +15,7 @@ import {
   Clock,
   AlertCircle,
   Trash2,
-  DollarSign,
+  Wallet,
 } from 'lucide-react';
 import { StaffKpi, KpiStatus, KpiPerformanceRating } from '../../types';
 import { formatNaira } from '../../utils/formatters';
@@ -27,6 +27,7 @@ export const KpiDashboard: React.FC = () => {
     branches,
     staffKpis,
     saveStaffKpi,
+    acceptStaffKpi,
     updateStaffKpiSelfReview,
     reviewStaffKpi,
     addKpiDailyLog,
@@ -46,6 +47,8 @@ export const KpiDashboard: React.FC = () => {
   const [isDailyLogModalOpen, setIsDailyLogModalOpen] = useState<boolean>(false);
   const [isSelfReviewModalOpen, setIsSelfReviewModalOpen] = useState<boolean>(false);
   const [isManagerReviewModalOpen, setIsManagerReviewModalOpen] = useState<boolean>(false);
+  const [isAcceptModalOpen, setIsAcceptModalOpen] = useState<boolean>(false);
+  const [acceptanceNotes, setAcceptanceNotes] = useState<string>('');
   const [activeKpiForAction, setActiveKpiForAction] = useState<StaffKpi | null>(null);
 
   // Feedback banner
@@ -339,7 +342,32 @@ export const KpiDashboard: React.FC = () => {
     }
   };
 
-  const getRatingBadge = (rating?: KpiPerformanceRating) => {
+  const handleOpenAcceptModal = (kpi: StaffKpi) => {
+    setActiveKpiForAction(kpi);
+    setAcceptanceNotes('');
+    setIsAcceptModalOpen(true);
+  };
+
+  const handleConfirmAcceptKpi = () => {
+    if (!activeKpiForAction) return;
+    const res = acceptStaffKpi(activeKpiForAction.id, acceptanceNotes.trim());
+    if (res.success) {
+      showFeedback('success', `KPI target for ${activeKpiForAction.period} accepted! Target is now active.`);
+      setIsAcceptModalOpen(false);
+    } else {
+      showFeedback('error', res.error || 'Failed to accept KPI');
+    }
+  };
+
+  const getRatingBadge = (rating?: KpiPerformanceRating, status?: KpiStatus) => {
+    if (status === 'pending_acceptance') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-2xs">
+          <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span>Awaiting Staff Acceptance</span>
+        </span>
+      );
+    }
     switch (rating) {
       case 'A - Outstanding':
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">Grade A - Outstanding</span>;
@@ -350,7 +378,58 @@ export const KpiDashboard: React.FC = () => {
       case 'D - Needs Improvement':
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">Grade D - Needs Improvement</span>;
       default:
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">Pending Review</span>;
+        if (status === 'active') {
+          return (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+              <TrendingUp className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <span>In Progress (Active)</span>
+            </span>
+          );
+        }
+        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">Target Active</span>;
+    }
+  };
+
+  const getStatusBadge = (status: KpiStatus) => {
+    switch (status) {
+      case 'pending_acceptance':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-100 text-amber-900 dark:bg-amber-900/50 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+            <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+            <span>Pending Acceptance</span>
+          </span>
+        );
+      case 'active':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            <CheckCircle className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+            <span>Active Target</span>
+          </span>
+        );
+      case 'under_review':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+            Under Review
+          </span>
+        );
+      case 'completed':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+            Completed
+          </span>
+        );
+      case 'exceeded':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
+            Exceeded Target
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 capitalize">
+            {status}
+          </span>
+        );
     }
   };
 
@@ -477,6 +556,44 @@ export const KpiDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* PENDING ACCEPTANCE NOTIFICATION BANNER (When Target is Assigned by Superadmin) */}
+      {myKpi && myKpi.status === 'pending_acceptance' && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-amber-600/10 to-emerald-600/15 border-2 border-amber-400 dark:border-amber-500 rounded-2xl p-5 sm:p-6 shadow-md transition-all">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="p-3 bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-200 rounded-2xl shrink-0 shadow-xs border border-amber-300 dark:border-amber-700">
+                <Clock className="w-6 h-6 animate-pulse text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200 uppercase tracking-wider">
+                    Action Required
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Period: {myKpi.period}
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mt-1">
+                  New Monthly KPI Target Assigned to You
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                  Superadmin Francis Gabriel has assigned your targets: Sales Target of <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatNaira(myKpi.monthlySalesTarget)}</span>, Gross Profit of <span className="font-semibold text-slate-800 dark:text-slate-200">{formatNaira(myKpi.grossProfitTarget || 0)}</span>, and {myKpi.quotationsTarget} customer quotations. Review and click accept to activate your performance tracking.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0 sm:self-center">
+              <button
+                onClick={() => handleOpenAcceptModal(myKpi)}
+                className="w-full sm:w-auto px-5 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>Accept KPI Target</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MY PERSONAL KPI CARD (Shown prominently for all staff) */}
       {myKpi ? (
         <div className="bg-gradient-to-br from-emerald-900 to-slate-900 text-white rounded-2xl p-6 shadow-md border border-emerald-800/40 relative overflow-hidden">
@@ -486,11 +603,11 @@ export const KpiDashboard: React.FC = () => {
 
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
             <div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold uppercase tracking-wider">
-                  My Active KPI ({selectedMonth})
+                  My Assigned KPI ({selectedMonth})
                 </span>
-                {getRatingBadge(myKpi.performanceRating)}
+                {getRatingBadge(myKpi.performanceRating, myKpi.status)}
               </div>
               <h2 className="text-2xl font-bold text-white mt-2">
                 {myKpi.staffName}
@@ -501,13 +618,23 @@ export const KpiDashboard: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={() => handleOpenDailyLog(myKpi)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold rounded-xl text-sm transition-all shadow-sm"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Log Daily Activity</span>
-              </button>
+              {myKpi.status === 'pending_acceptance' ? (
+                <button
+                  onClick={() => handleOpenAcceptModal(myKpi)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-xl text-sm transition-all shadow-sm"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Accept Target</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleOpenDailyLog(myKpi)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold rounded-xl text-sm transition-all shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Log Daily Activity</span>
+                </button>
+              )}
               <button
                 onClick={() => handleOpenSelfReview(myKpi)}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-medium rounded-xl text-sm transition-all"
@@ -664,7 +791,7 @@ export const KpiDashboard: React.FC = () => {
               Total Target (₦)
             </span>
             <span className="p-2 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 rounded-lg">
-              <DollarSign className="w-4 h-4" />
+              <Wallet className="w-4 h-4" />
             </span>
           </div>
           <div className="mt-3 text-2xl font-bold text-slate-900 dark:text-white">
@@ -743,7 +870,8 @@ export const KpiDashboard: React.FC = () => {
           </span>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop Data Table (hidden on mobile) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs uppercase tracking-wider">
@@ -753,7 +881,7 @@ export const KpiDashboard: React.FC = () => {
                 <th className="py-3 px-4 font-semibold">Achieved (₦)</th>
                 <th className="py-3 px-4 font-semibold">Attainment</th>
                 <th className="py-3 px-4 font-semibold">Quotes</th>
-                <th className="py-3 px-4 font-semibold">Rating</th>
+                <th className="py-3 px-4 font-semibold">Rating Grade</th>
                 <th className="py-3 px-4 font-semibold">Status</th>
                 <th className="py-3 px-4 font-semibold text-right">Actions</th>
               </tr>
@@ -816,10 +944,10 @@ export const KpiDashboard: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <span className={`text-xs font-bold ${
                             attainmentPct >= 100
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : attainmentPct >= 70
-                              ? 'text-blue-600 dark:text-blue-400'
-                              : 'text-amber-600 dark:text-amber-400'
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : attainmentPct >= 70
+                                ? 'text-blue-600 dark:text-blue-400'
+                                : 'text-amber-600 dark:text-amber-400'
                           }`}>
                             {attainmentPct}%
                           </span>
@@ -839,17 +967,27 @@ export const KpiDashboard: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 px-4">
-                        {getRatingBadge(kpi.performanceRating)}
+                        {getRatingBadge(kpi.performanceRating, kpi.status)}
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                          {kpi.status}
-                        </span>
+                        {getStatusBadge(kpi.status)}
                       </td>
 
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Staff Accept Target button */}
+                          {kpi.status === 'pending_acceptance' && (isMyRecord || isManagement) && (
+                            <button
+                              onClick={() => handleOpenAcceptModal(kpi)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-2xs"
+                              title="Review & Accept KPI Target"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              <span>Accept</span>
+                            </button>
+                          )}
+
                           {/* Log daily for this staff */}
                           <button
                             onClick={() => handleOpenDailyLog(kpi)}
@@ -902,6 +1040,141 @@ export const KpiDashboard: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View (block md:hidden) - Fully responsive touch-friendly cards */}
+        <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+          {filteredKpis.length === 0 ? (
+            <div className="py-12 px-4 text-center text-slate-400">
+              <Target className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="font-medium text-slate-600 dark:text-slate-400 text-sm">
+                No KPI targets assigned for {selectedMonth} yet.
+              </p>
+              {isManagement && (
+                <button
+                  onClick={() => handleOpenAssignModal()}
+                  className="mt-3 text-xs text-emerald-600 dark:text-emerald-400 font-semibold"
+                >
+                  + Assign target to staff now
+                </button>
+              )}
+            </div>
+          ) : (
+            filteredKpis.map(kpi => {
+              const attainmentPct = kpi.monthlySalesTarget > 0 ? Math.round((kpi.actualSalesAchieved / kpi.monthlySalesTarget) * 100) : 0;
+              const isMyRecord = kpi.staffId === currentUser.id;
+
+              return (
+                <div key={`mob_${kpi.id}`} className="p-4 space-y-3 bg-white dark:bg-slate-900">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold flex items-center justify-center text-xs shrink-0">
+                        {kpi.staffName.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-slate-900 dark:text-white leading-tight">
+                          {kpi.staffName}
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 capitalize">
+                          {kpi.staffRole.replace(/_/g, ' ')} &bull; {kpi.branchName || 'HQ Store'}
+                        </p>
+                      </div>
+                    </div>
+                    {getStatusBadge(kpi.status)}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <span className="text-slate-500 dark:text-slate-400">Performance Rating:</span>
+                    {getRatingBadge(kpi.performanceRating, kpi.status)}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-xs">
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Monthly Target</span>
+                      <span className="font-bold text-slate-900 dark:text-white text-sm">
+                        {formatNaira(kpi.monthlySalesTarget)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Achieved Sales</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                        {formatNaira(kpi.actualSalesAchieved)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Quotations</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        {kpi.quotationsConverted} / {kpi.quotationsCreated} converted
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Attainment</span>
+                      <span className="font-bold text-slate-900 dark:text-white">
+                        {attainmentPct}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                    <div
+                      className={`h-2 rounded-full ${attainmentPct >= 100 ? 'bg-emerald-500' : attainmentPct >= 70 ? 'bg-blue-500' : 'bg-amber-500'}`}
+                      style={{ width: `${Math.min(100, attainmentPct)}%` }}
+                    />
+                  </div>
+
+                  {/* Mobile action button group */}
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    {kpi.status === 'pending_acceptance' && (isMyRecord || isManagement) && (
+                      <button
+                        onClick={() => handleOpenAcceptModal(kpi)}
+                        className="flex-1 py-2 px-3 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Accept Target</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleOpenDailyLog(kpi)}
+                      className="py-2 px-3 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-semibold text-xs rounded-xl flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Log Activity</span>
+                    </button>
+                    {(isMyRecord || isManagement) && (
+                      <button
+                        onClick={() => handleOpenSelfReview(kpi)}
+                        className="py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl flex items-center gap-1"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Review</span>
+                      </button>
+                    )}
+                    {isManagement && (
+                      <button
+                        onClick={() => handleOpenManagerReview(kpi)}
+                        className="py-2 px-3 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-semibold text-xs rounded-xl flex items-center gap-1"
+                      >
+                        <Award className="w-3.5 h-3.5" />
+                        <span>Score</span>
+                      </button>
+                    )}
+                    {currentUser.role === 'super_admin' && (
+                      <button
+                        onClick={() => {
+                          deleteStaffKpi(kpi.id);
+                          showFeedback('success', 'KPI target removed.');
+                        }}
+                        className="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-xl ml-auto"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -1358,6 +1631,98 @@ export const KpiDashboard: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: Accept KPI Performance Target */}
+      {isAcceptModalOpen && activeKpiForAction && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                  <CheckCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white">
+                    Accept KPI Performance Target
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Period: {activeKpiForAction.period} &bull; {activeKpiForAction.staffName}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAcceptModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-semibold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5 text-xs">
+                <p className="font-semibold text-slate-700 dark:text-slate-300">Target Breakdown Assigned:</p>
+                <div className="grid grid-cols-2 gap-3 text-slate-600 dark:text-slate-300">
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Monthly Sales Target:</span>
+                    <span className="font-bold text-slate-900 dark:text-white text-sm">
+                      {formatNaira(activeKpiForAction.monthlySalesTarget)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Gross Profit Target:</span>
+                    <span className="font-bold text-slate-900 dark:text-white text-sm">
+                      {formatNaira(activeKpiForAction.grossProfitTarget || 0)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Quotations Target:</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">
+                      {activeKpiForAction.quotationsTarget} Quotes
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Installations Target:</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">
+                      {activeKpiForAction.installationsTarget} Installations
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Staff Acceptance / Acknowledgment Note (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={acceptanceNotes}
+                  onChange={e => setAcceptanceNotes(e.target.value)}
+                  placeholder="e.g. Target reviewed and accepted. Ready to execute monthly solar goals."
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAcceptModalOpen(false)}
+                  className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmAcceptKpi}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-md transition-all flex items-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Confirm & Accept Target</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

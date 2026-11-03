@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
-  CircleDollarSign,
+  Receipt,
   Plus,
   Search,
   Download,
@@ -9,7 +9,7 @@ import {
   PieChart as PieIcon,
   Calendar,
   Filter,
-  DollarSign,
+  Wallet,
   Building,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -147,7 +147,7 @@ export const Finance: React.FC = () => {
             value: totalRevenue > 0 ? `${Math.round((grossProfit / totalRevenue) * 100)}% margin` : '0%',
             isPositive: true,
           }}
-          icon={<CircleDollarSign className="w-4 h-4 text-emerald-600" />}
+          icon={<Receipt className="w-4 h-4 text-emerald-600" />}
           variant="emerald"
         />
 
@@ -164,7 +164,7 @@ export const Finance: React.FC = () => {
           value={formatNaira(operatingProfit)}
           subValue={`Net Margin: ${totalRevenue > 0 ? Math.round((operatingProfit / totalRevenue) * 100) : 0}%`}
           trend={{ value: operatingProfit >= 0 ? 'Profitable' : 'Deficit', isPositive: operatingProfit >= 0 }}
-          icon={<DollarSign className="w-4 h-4 text-slate-600" />}
+          icon={<Wallet className="w-4 h-4 text-slate-600" />}
           variant={operatingProfit >= 0 ? 'emerald' : 'rose'}
         />
       </div>

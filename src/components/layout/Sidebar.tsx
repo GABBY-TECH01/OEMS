@@ -9,7 +9,7 @@ import {
   Users,
   FileSpreadsheet,
   Wrench,
-  CircleDollarSign,
+  Wallet,
   BarChart3,
   History,
   Settings,
@@ -139,7 +139,7 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
         {
           id: 'finance',
           label: 'Operating Expenses',
-          icon: <CircleDollarSign className="w-4 h-4" />,
+          icon: <Wallet className="w-4 h-4" />,
         },
         {
           id: 'reports',

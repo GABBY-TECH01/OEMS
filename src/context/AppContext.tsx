@@ -108,6 +108,7 @@ interface AppContextType {
   // Staff KPIs & Targets Hub
   staffKpis: StaffKpi[];
   saveStaffKpi: (kpiData: Partial<StaffKpi>) => { success: boolean; error?: string };
+  acceptStaffKpi: (kpiId: string, notes?: string) => { success: boolean; error?: string };
   updateStaffKpiSelfReview: (kpiId: string, updates: {
     selfAssessmentNotes: string;
     actualSalesAchieved?: number;
@@ -1182,12 +1183,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selfAssessmentNotes: kpiData.selfAssessmentNotes || '',
         managerReviewNotes: kpiData.managerReviewNotes || '',
         performanceRating: kpiData.performanceRating || 'Pending',
-        status: kpiData.status || 'active',
+        status: kpiData.status || 'pending_acceptance',
         dailyLogs: kpiData.dailyLogs || [],
         createdAt: now,
         updatedAt: now,
       };
       currentKpis.unshift(savedKpi);
+
+      // Trigger an in-app notification for the staff member
+      const notif: AppNotification = {
+        id: `notif_kpi_${Date.now()}`,
+        title: 'New KPI Target Assigned',
+        message: `${currentUser.name} assigned your KPI target for ${savedKpi.period}. Please review and accept your target.`,
+        type: 'info',
+        read: false,
+        linkModule: 'kpis',
+        createdAt: now,
+      };
+      const currentNotifs = StorageService.getNotifications();
+      StorageService.saveNotifications([notif, ...currentNotifs]);
+      setNotifications([notif, ...currentNotifs]);
     }
 
     StorageService.saveStaffKpis(currentKpis);
@@ -1203,6 +1218,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       module: 'kpis',
       recordId: savedKpi.id,
       details: `${kpiData.id ? 'Updated' : 'Created'} KPI record for ${savedKpi.staffName} (${savedKpi.period}).`,
+    });
+    setAuditLogs(StorageService.getAuditLogs());
+
+    return { success: true };
+  };
+
+  const acceptStaffKpi = (kpiId: string, notes?: string): { success: boolean; error?: string } => {
+    const currentKpis = StorageService.getStaffKpis();
+    const idx = currentKpis.findIndex(k => k.id === kpiId);
+    if (idx === -1) return { success: false, error: 'KPI record not found.' };
+
+    const target = currentKpis[idx];
+    const now = new Date().toISOString();
+
+    currentKpis[idx] = {
+      ...target,
+      status: 'active',
+      acceptedAt: now,
+      acceptedByStaffId: currentUser.id,
+      acceptanceNotes: notes || 'Target accepted and acknowledged by staff member.',
+      updatedAt: now,
+    };
+
+    StorageService.saveStaffKpis(currentKpis);
+    setStaffKpis([...currentKpis]);
+
+    saveKpiToSupabase(currentKpis[idx]).catch(e => console.warn('Supabase KPI sync note:', e));
+
+    const notif: AppNotification = {
+      id: `notif_kpi_acc_${Date.now()}`,
+      title: 'KPI Target Accepted',
+      message: `${currentUser.name} (${target.staffName}) accepted their KPI target for ${target.period}. Target is now active.`,
+      type: 'success',
+      read: false,
+      linkModule: 'kpis',
+      createdAt: now,
+    };
+    const currentNotifs = StorageService.getNotifications();
+    StorageService.saveNotifications([notif, ...currentNotifs]);
+    setNotifications([notif, ...currentNotifs]);
+
+    StorageService.logAction({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userRole: currentUser.role,
+      action: 'ACCEPT_KPI_TARGET',
+      module: 'kpis',
+      recordId: kpiId,
+      details: `${currentUser.name} accepted assigned KPI target for ${target.period}. Target is now active.`,
     });
     setAuditLogs(StorageService.getAuditLogs());
 
@@ -2051,6 +2115,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Staff KPIs & Performance
       staffKpis,
       saveStaffKpi,
+      acceptStaffKpi,
       updateStaffKpiSelfReview,
       reviewStaffKpi,
       addKpiDailyLog,

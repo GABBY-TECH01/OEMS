@@ -8,7 +8,7 @@ import {
   PackageCheck,
   AlertTriangle,
   FileText,
-  DollarSign,
+  Wallet,
   Download,
   Building,
   User,
@@ -184,7 +184,7 @@ export const Purchasing: React.FC = () => {
           label="Outstanding Supplier Payables"
           value={formatNaira(totalPayables)}
           subValue={`Across ${suppliers.length} active vendors`}
-          icon={<DollarSign className="w-4 h-4 text-slate-600" />}
+          icon={<Wallet className="w-4 h-4 text-slate-600" />}
           variant="amber"
         />
         <StatCard
