@@ -26,6 +26,7 @@ import { useApp, ActiveTab } from '../../context/AppContext';
 import { getRoleLabel } from '../../utils/formatters';
 import { UserRole } from '../../types';
 import { BRAND_LOGO_URL } from '../../constants/branding';
+import { PWAInstallButton } from '../common/PWAInstallButton';
 
 export const Header: React.FC = () => {
   const {
@@ -375,6 +376,9 @@ export const Header: React.FC = () => {
             )}
           </div>
         )}
+
+        {/* Download / Install PWA App Button */}
+        <PWAInstallButton variant="header" />
 
         {/* Dark Mode Toggle Button */}
         <button

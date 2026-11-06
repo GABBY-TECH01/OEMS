@@ -537,3 +537,28 @@ export interface StaffKpi {
   createdAt: string;
   updatedAt: string;
 }
+
+export type OfflineSyncEntityType =
+  | 'sale'
+  | 'customer'
+  | 'expense'
+  | 'product'
+  | 'stock_movement'
+  | 'purchase_order'
+  | 'quotation'
+  | 'project'
+  | 'kpi'
+  | 'kpi_log'
+  | 'branch'
+  | 'staff';
+
+export interface OfflineSyncItem {
+  id: string;
+  entityType: OfflineSyncEntityType;
+  action: 'create' | 'update' | 'delete';
+  data: any;
+  timestamp: string;
+  retryCount?: number;
+  lastError?: string;
+}
+

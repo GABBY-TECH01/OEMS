@@ -9,6 +9,7 @@ import { Menu } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
+import { OfflineSyncBanner } from './components/common/OfflineSyncBanner';
 import { LoginView } from './components/auth/LoginView';
 import { BranchManagement } from './components/branches/BranchManagement';
 import { StaffManagement } from './components/staff/StaffManagement';
@@ -109,6 +110,9 @@ const MainLayout: React.FC = () => {
             Ibadan Hubs
           </span>
         </div>
+
+        {/* Real-Time Offline Sync & Connectivity Banner */}
+        <OfflineSyncBanner />
 
         {/* Global Desktop & Context Top Header */}
         <Header />

@@ -32,6 +32,7 @@ import {
   KpiDailyLog,
   KpiStatus,
   KpiPerformanceRating,
+  OfflineSyncItem,
 } from '../types';
 import { StorageService, INITIAL_CATEGORIES } from '../services/storage';
 import {
@@ -62,10 +63,18 @@ import {
   saveKpiDailyLogToSupabase,
   deleteKpiFromSupabase,
 } from '../services/supabaseDataService';
+import { IndexedDbService, PendingTransaction } from '../services/indexedDbService';
 
 export type { ActiveTab };
 
 interface AppContextType {
+  // Offline Synchronization & PWA Engine (IndexedDB via Dexie)
+  isOnline: boolean;
+  offlineQueueCount: number;
+  isSyncingOfflineQueue: boolean;
+  pendingTransactions: PendingTransaction[];
+  flushOfflineSyncQueue: () => Promise<{ success: boolean; syncedCount: number; errors?: string[] }>;
+
   // Theme & Appearance
   theme: 'light' | 'dark';
   toggleTheme: () => void;
@@ -266,6 +275,155 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [supabaseLoading, setSupabaseLoading] = useState<boolean>(false);
   const [supabaseSyncTime, setSupabaseSyncTime] = useState<string | null>(null);
   const [supabaseSyncError, setSupabaseSyncError] = useState<string | null>(null);
+
+  // Offline Synchronization & PWA Engine
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    if (typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean') {
+      return navigator.onLine;
+    }
+    return true;
+  });
+  const [offlineQueueCount, setOfflineQueueCount] = useState<number>(0);
+  const [pendingTransactions, setPendingTransactions] = useState<PendingTransaction[]>([]);
+  const [isSyncingOfflineQueue, setIsSyncingOfflineQueue] = useState<boolean>(false);
+
+  const updateOfflineQueueCount = useCallback(async () => {
+    try {
+      const dbCount = await IndexedDbService.getPendingCount();
+      const pendingList = await IndexedDbService.getPendingTransactions();
+      const localCount = StorageService.getOfflineQueueCount();
+      setPendingTransactions(pendingList);
+      setOfflineQueueCount(Math.max(dbCount, localCount));
+    } catch {
+      setOfflineQueueCount(StorageService.getOfflineQueueCount());
+    }
+  }, []);
+
+  // Initialize offline queue state from IndexedDB on mount
+  useEffect(() => {
+    updateOfflineQueueCount();
+  }, [updateOfflineQueueCount]);
+
+  // Flush offline queue to Supabase when network is healthy (IndexedDB + Storage fallback)
+  const flushOfflineSyncQueue = useCallback(async (): Promise<{ success: boolean; syncedCount: number; errors?: string[] }> => {
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      return { success: false, syncedCount: 0, errors: ['Offline or Supabase unconfigured'] };
+    }
+
+    setIsSyncingOfflineQueue(true);
+    let synced = 0;
+    const errors: string[] = [];
+
+    try {
+      // 1. First sync any pending POS transactions in Dexie IndexedDB
+      const pendingSales = await IndexedDbService.getPendingTransactions();
+      for (const tx of pendingSales) {
+        try {
+          const res = await saveSaleToSupabase(tx.saleData);
+          if (res.success) {
+            await IndexedDbService.markTransactionSynced(tx.id);
+            StorageService.dequeueOfflineItem(`sync_${tx.id}`);
+            synced++;
+          } else {
+            await IndexedDbService.markTransactionFailed(tx.id, res.error || 'Sync failed');
+            errors.push(`Sale #${tx.invoiceNumber}: ${res.error || 'Sync error'}`);
+          }
+        } catch (err: any) {
+          await IndexedDbService.markTransactionFailed(tx.id, err.message || String(err));
+          errors.push(`Sale #${tx.invoiceNumber}: ${err.message || String(err)}`);
+        }
+      }
+
+      // 2. Sync generic offline queue items from Dexie IndexedDB and Storage
+      const idbQueue = await IndexedDbService.getAllQueuedItems();
+      const localQueue = StorageService.getOfflineQueue();
+      const combinedMap = new Map<string, OfflineSyncItem>();
+
+      localQueue.forEach(item => combinedMap.set(item.id, item));
+      idbQueue.forEach(item => combinedMap.set(item.id, item));
+
+      for (const item of combinedMap.values()) {
+        try {
+          let res: { success: boolean; error?: string } = { success: false };
+
+          if (item.entityType === 'sale') {
+            res = await saveSaleToSupabase(item.data);
+            if (res.success && item.data?.id) {
+              await IndexedDbService.markTransactionSynced(item.data.id);
+            }
+          } else if (item.entityType === 'customer') {
+            res = await saveCustomerToSupabase(item.data);
+          } else if (item.entityType === 'expense') {
+            res = await saveExpenseToSupabase(item.data);
+          } else if (item.entityType === 'product') {
+            res = await saveProductToSupabase(item.data);
+          } else if (item.entityType === 'branch') {
+            res = await saveBranchToSupabase(item.data);
+          } else if (item.entityType === 'purchase_order') {
+            res = await savePurchaseOrderToSupabase(item.data);
+          } else if (item.entityType === 'quotation') {
+            res = await saveQuotationToSupabase(item.data);
+          } else if (item.entityType === 'project') {
+            res = await saveProjectToSupabase(item.data);
+          } else if (item.entityType === 'stock_movement') {
+            res = await saveStockMovementToSupabase(item.data);
+          } else if (item.entityType === 'staff') {
+            res = await saveStaffProfileToSupabase(item.data);
+          } else if (item.entityType === 'kpi') {
+            res = await saveKpiToSupabase(item.data);
+          } else if (item.entityType === 'kpi_log') {
+            res = await saveKpiDailyLogToSupabase(item.data);
+          }
+
+          if (res.success) {
+            await IndexedDbService.dequeueItem(item.id);
+            StorageService.dequeueOfflineItem(item.id);
+            synced++;
+          } else {
+            errors.push(`${item.entityType}: ${res.error || 'Sync failed'}`);
+          }
+        } catch (err: any) {
+          errors.push(`${item.entityType}: ${err.message || String(err)}`);
+        }
+      }
+    } catch (e: any) {
+      console.warn('Flush offline queue caught error:', e);
+    } finally {
+      setIsSyncingOfflineQueue(false);
+      await updateOfflineQueueCount();
+    }
+
+    return { success: errors.length === 0, syncedCount: synced, errors: errors.length > 0 ? errors : undefined };
+  }, [updateOfflineQueueCount]);
+
+  // Monitor network online / offline transitions
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      // Auto flush offline queue when reconnecting
+      flushOfflineSyncQueue().then(res => {
+        if (res.syncedCount > 0) {
+          console.log(`PWA Synced ${res.syncedCount} queued items to Supabase cloud.`);
+        }
+      });
+      if (isSupabaseConfigured()) {
+        syncWithSupabase();
+      }
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [flushOfflineSyncQueue]);
+
 
   const syncWithSupabase = useCallback(async (): Promise<boolean> => {
     if (!isSupabaseConfigured()) {
@@ -1610,10 +1768,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
     if (res.success) {
       if (res.sale) {
-        // Persist sale to Supabase
-        saveSaleToSupabase(res.sale).catch(err => {
-          console.warn('saveSaleToSupabase error:', err);
-        });
+        if (!navigator.onLine || !isSupabaseConfigured()) {
+          // Store in Dexie IndexedDB pending transactions table + Storage fallback
+          IndexedDbService.recordPendingTransaction(res.sale)
+            .catch(e => console.warn('IndexedDB recordPendingTransaction error:', e))
+            .finally(() => updateOfflineQueueCount());
+          StorageService.enqueueOfflineItem('sale', 'create', res.sale);
+        } else {
+          saveSaleToSupabase(res.sale)
+            .then(syncRes => {
+              if (!syncRes.success) {
+                IndexedDbService.recordPendingTransaction(res.sale!)
+                  .catch(e => console.warn('IndexedDB record error:', e))
+                  .finally(() => updateOfflineQueueCount());
+                StorageService.enqueueOfflineItem('sale', 'create', res.sale);
+              }
+            })
+            .catch(err => {
+              console.warn('saveSaleToSupabase error, queued offline:', err);
+              IndexedDbService.recordPendingTransaction(res.sale!)
+                .catch(e => console.warn('IndexedDB record error:', e))
+                .finally(() => updateOfflineQueueCount());
+              StorageService.enqueueOfflineItem('sale', 'create', res.sale);
+            });
+        }
       }
       refreshData();
     }
@@ -2170,6 +2348,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       supabaseSyncTime,
       supabaseSyncError,
       syncWithSupabase,
+      // Offline Synchronization & PWA Engine
+      isOnline,
+      offlineQueueCount,
+      isSyncingOfflineQueue,
+      pendingTransactions,
+      flushOfflineSyncQueue,
     }),
     [
       theme,
@@ -2209,6 +2393,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       supabaseSyncTime,
       supabaseSyncError,
       syncWithSupabase,
+      isOnline,
+      offlineQueueCount,
+      isSyncingOfflineQueue,
+      pendingTransactions,
+      flushOfflineSyncQueue,
     ]
   );
 

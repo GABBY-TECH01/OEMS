@@ -24,6 +24,7 @@ import {
 import { useApp, ActiveTab } from '../../context/AppContext';
 import { getRoleLabel, getAllowedTabsForUser } from '../../utils/formatters';
 import { BRAND_LOGO_URL } from '../../constants/branding';
+import { PWAInstallButton } from '../common/PWAInstallButton';
 
 export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
   isOpen,
@@ -271,6 +272,11 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                 {getRoleLabel(currentUser.role)}
               </p>
             </div>
+          </div>
+
+          {/* Download / Install Mobile App Banner */}
+          <div className="mb-2">
+            <PWAInstallButton variant="sidebar" />
           </div>
 
           <div className="grid grid-cols-2 gap-2 mb-2">

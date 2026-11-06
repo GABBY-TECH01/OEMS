@@ -2,8 +2,82 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/jpeg" href="/assets/aistudio/WhatsApp_Image_2026-10-27_at_12.35.58_PM_cf69d348.jpeg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+    <script>
+      (function() {
+        // Defensive fix for browser extensions (Urban VPN, interceptors, etc.) that execute
+        // `window.fetch = ...` inside strict-mode contexts where fetch is defined as a getter-only property.
+        try {
+          var targets = [
+            window,
+            typeof Window !== 'undefined' ? Window.prototype : null,
+            typeof globalThis !== 'undefined' ? globalThis : null
+          ];
+          var originalFetch = window.fetch;
+          var currentFetch = originalFetch;
+
+          for (var i = 0; i < targets.length; i++) {
+            var target = targets[i];
+            if (!target) continue;
+            try {
+              Object.defineProperty(target, 'fetch', {
+                configurable: true,
+                enumerable: true,
+                get: function() {
+                  return currentFetch;
+                },
+                set: function(val) {
+                  currentFetch = val;
+                }
+              });
+            } catch (inner) {}
+          }
+        } catch (e) {}
+
+        // Global safeguard against unhandled errors originating from chrome-extension:// or moz-extension://
+        var prevOnError = window.onerror;
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+          if (url && (url.indexOf('chrome-extension://') !== -1 || url.indexOf('moz-extension://') !== -1)) {
+            return true; // Suppress extension injection errors
+          }
+          if (msg && typeof msg === 'string' && msg.indexOf('Cannot set property fetch of #<Window>') !== -1) {
+            return true; // Suppress extension fetch assignment crashes
+          }
+          if (prevOnError) {
+            return prevOnError.apply(this, arguments);
+          }
+          return false;
+        };
+
+        window.addEventListener('error', function(event) {
+          var source = (event && (event.filename || (event.error && event.error.stack))) || '';
+          if (source.indexOf('chrome-extension://') !== -1 || source.indexOf('moz-extension://') !== -1) {
+            event.stopImmediatePropagation();
+            event.preventDefault();
+            return true;
+          }
+          if (event && event.message && event.message.indexOf('Cannot set property fetch of #<Window>') !== -1) {
+            event.stopImmediatePropagation();
+            event.preventDefault();
+            return true;
+          }
+        }, true);
+
+        // Capture PWA beforeinstallprompt immediately on page load
+        window.addEventListener('beforeinstallprompt', function(e) {
+          e.preventDefault();
+          window.__pwaDeferredPrompt = e;
+        });
+      })();
+    </script>
+    <meta name="theme-color" content="#064e3b" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="OffnotEnergy" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="mask-icon" href="/icon-maskable.svg" color="#064e3b" />
     <title>Offnot Energy Management System</title>
     <meta name="description" content="Enterprise solar business management system for inventory control, multi-tier POS sales, installer management, project tracking, purchasing, and financial accounting." />
     <meta property="og:title" content="Offnot Energy Management System" />

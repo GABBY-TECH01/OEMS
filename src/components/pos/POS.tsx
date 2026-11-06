@@ -16,6 +16,9 @@ import {
   ScanBarcode,
   Layers,
   Sparkles,
+  WifiOff,
+  Database,
+  CloudUpload,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product, PricingTier, PaymentMethod, Sale } from '../../types';
@@ -33,6 +36,10 @@ export const POS: React.FC = () => {
     completeSale,
     saveCustomer,
     globalSearchQuery,
+    isOnline,
+    pendingTransactions,
+    flushOfflineSyncQueue,
+    isSyncingOfflineQueue,
   } = useApp();
 
   // Search & Filter
@@ -438,14 +445,25 @@ export const POS: React.FC = () => {
               <ShoppingCart className="w-4 h-4 text-emerald-700" />
               <h3 className="text-sm font-bold text-slate-900">Current Order Cart</h3>
             </div>
-            {cart.length > 0 && (
-              <button
-                onClick={clearCart}
-                className="text-[11px] text-rose-600 hover:text-rose-700 font-medium"
-              >
-                Clear Cart
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {pendingTransactions.length > 0 && (
+                <div
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[10px] font-bold"
+                  title={`${pendingTransactions.length} pending POS sale(s) stored in IndexedDB awaiting Supabase sync.`}
+                >
+                  <Database className="w-3 h-3 text-amber-600 shrink-0" />
+                  <span>{pendingTransactions.length} in IndexedDB</span>
+                </div>
+              )}
+              {cart.length > 0 && (
+                <button
+                  onClick={clearCart}
+                  className="text-[11px] text-rose-600 hover:text-rose-700 font-medium"
+                >
+                  Clear Cart
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Customer Selection & Quick Add */}
@@ -583,9 +601,14 @@ export const POS: React.FC = () => {
           <button
             onClick={handleOpenPayment}
             disabled={cart.length === 0}
-            className="w-full py-2.5 px-4 rounded-xl font-bold text-xs text-white bg-emerald-800 hover:bg-emerald-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center justify-center gap-2"
+            className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center justify-center gap-2 ${
+              !isOnline
+                ? 'bg-amber-600 hover:bg-amber-700'
+                : 'bg-emerald-800 hover:bg-emerald-900'
+            }`}
           >
-            <span>Proceed to Payment</span>
+            {!isOnline && <WifiOff className="w-3.5 h-3.5 shrink-0" />}
+            <span>{!isOnline ? 'Process Offline POS Sale' : 'Proceed to Payment'}</span>
             <span className="font-mono">({formatNaira(grandTotal)})</span>
           </button>
         </div>

@@ -31,6 +31,8 @@ import {
   RolePermissionsMap,
   StaffKpi,
   KpiDailyLog,
+  OfflineSyncItem,
+  OfflineSyncEntityType,
 } from '../types';
 
 export const STORAGE_KEYS = {
@@ -55,6 +57,7 @@ export const STORAGE_KEYS = {
   ROLE_PERMISSIONS: 'offnot_role_permissions_v3',
   STAFF_KPIS: 'offnot_staff_kpis_v3',
   SUPERADMIN_PASSWORD: 'offnot_superadmin_password_v3',
+  OFFLINE_SYNC_QUEUE: 'offnot_offline_sync_queue_v3',
 };
 
 export const INITIAL_ROLE_PERMISSIONS: RolePermissionsMap = {
@@ -1801,4 +1804,75 @@ export const StorageService = {
 
     return { success: true };
   },
+
+  // -------------------------------------------------------------------------
+  // OFFLINE-FIRST SYNCHRONIZATION QUEUE ENGINE
+  // -------------------------------------------------------------------------
+  getOfflineQueue(): OfflineSyncItem[] {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.OFFLINE_SYNC_QUEUE);
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      console.warn('Failed to read offline sync queue', e);
+      return [];
+    }
+  },
+
+  enqueueOfflineItem(
+    entityType: OfflineSyncEntityType,
+    action: 'create' | 'update' | 'delete',
+    data: any
+  ): OfflineSyncItem {
+    const queue = this.getOfflineQueue();
+    const item: OfflineSyncItem = {
+      id: `sync_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      entityType,
+      action,
+      data,
+      timestamp: new Date().toISOString(),
+      retryCount: 0,
+    };
+    
+    // Avoid duplicate sync items for exact same record id and entity
+    const recordId = data?.id || data?.invoiceNumber;
+    let updatedQueue: OfflineSyncItem[];
+    if (recordId) {
+      updatedQueue = queue.filter(
+        q => !(q.entityType === entityType && (q.data?.id === recordId || q.data?.invoiceNumber === recordId))
+      );
+      updatedQueue.push(item);
+    } else {
+      updatedQueue = [...queue, item];
+    }
+
+    try {
+      localStorage.setItem(STORAGE_KEYS.OFFLINE_SYNC_QUEUE, JSON.stringify(updatedQueue));
+    } catch (e) {
+      console.error('Failed to write to offline sync queue', e);
+    }
+    return item;
+  },
+
+  dequeueOfflineItem(itemId: string): void {
+    const queue = this.getOfflineQueue();
+    const filtered = queue.filter(q => q.id !== itemId);
+    try {
+      localStorage.setItem(STORAGE_KEYS.OFFLINE_SYNC_QUEUE, JSON.stringify(filtered));
+    } catch (e) {
+      console.error('Failed to dequeue offline item', e);
+    }
+  },
+
+  clearOfflineQueue(): void {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.OFFLINE_SYNC_QUEUE);
+    } catch (e) {
+      console.error('Failed to clear offline queue', e);
+    }
+  },
+
+  getOfflineQueueCount(): number {
+    return this.getOfflineQueue().length;
+  },
 };
+

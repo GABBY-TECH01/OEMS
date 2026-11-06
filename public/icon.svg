@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b"/>
+      <stop offset="50%" stop-color="#065f46"/>
+      <stop offset="100%" stop-color="#022c22"/>
+    </linearGradient>
+    <linearGradient id="sunGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="40%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="panelGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="50%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#059669" stop-opacity="0.2"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- Background with subtle rounded corners -->
+  <rect width="512" height="512" rx="100" fill="url(#bgGrad)"/>
+  
+  <!-- Outer glowing accent ring -->
+  <circle cx="256" cy="256" r="210" fill="none" stroke="url(#glowGrad)" stroke-width="4" stroke-dasharray="8 6"/>
+
+  <!-- Rising Sun Motif -->
+  <g filter="url(#dropShadow)">
+    <circle cx="256" cy="180" r="82" fill="url(#sunGrad)"/>
+    
+    <!-- Radiant Sun Rays -->
+    <path d="M256 68 L256 44 M256 292 L256 316 M144 180 L120 180 M368 180 L392 180 M177 101 L160 84 M335 259 L352 276 M177 259 L160 276 M335 101 L352 84" 
+          stroke="url(#sunGrad)" stroke-width="8" stroke-linecap="round"/>
+  </g>
+
+  <!-- Stylized Solar Panel Grid -->
+  <g filter="url(#dropShadow)" transform="translate(0, 30)">
+    <!-- Base Trapezoid Frame for 3D Perspective -->
+    <polygon points="126,290 386,290 426,410 86,410" fill="#0f172a" stroke="#10b981" stroke-width="6"/>
+    
+    <!-- Solar Cells with Vibrant Gradient -->
+    <!-- Row 1 Top -->
+    <polygon points="138,300 250,300 248,346 122,346" fill="url(#panelGrad)"/>
+    <polygon points="262,300 374,300 390,346 264,346" fill="url(#panelGrad)"/>
+    
+    <!-- Row 2 Bottom -->
+    <polygon points="118,354 246,354 244,400 96,400" fill="url(#panelGrad)"/>
+    <polygon points="266,354 394,354 416,400 268,400" fill="url(#panelGrad)"/>
+    
+    <!-- Silver Grid Lines -->
+    <line x1="256" y1="294" x2="256" y2="406" stroke="#e2e8f0" stroke-width="4" stroke-linecap="round"/>
+    <line x1="110" y1="350" x2="402" y2="350" stroke="#e2e8f0" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <!-- Energy Lightning Bolt Accent -->
+  <path d="M272 150 L238 214 L266 214 L244 278 L290 202 L260 202 Z" 
+        fill="#ffffff" filter="url(#dropShadow)"/>
+
+  <!-- Brand Typography: OFFNOT -->
+  <text x="256" y="475" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="34" letter-spacing="6" fill="#f8fafc">
+    OFFNOT
+  </text>
+  <text x="256" y="495" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="14" letter-spacing="4" fill="#34d399">
+    ENERGY
+  </text>
+</svg>
