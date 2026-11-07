@@ -47,6 +47,7 @@ export const Header: React.FC = () => {
     resetToZeroLedger,
     changeSuperadminPassword,
     updateStaffAccount,
+    settings,
     theme,
     toggleTheme,
     isSupabaseConnected,
@@ -126,12 +127,15 @@ export const Header: React.FC = () => {
       {/* Zone 1: Breadcrumb & Context */}
       <div className="flex items-center gap-2.5 min-w-0">
         <img
-          src={BRAND_LOGO_URL}
-          alt="Offnot Energy"
+          src={settings.pwaLogoUrl || BRAND_LOGO_URL}
+          alt={settings.companyName || 'Offnot Energy'}
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = BRAND_LOGO_URL;
+          }}
           className="w-7 h-7 object-contain rounded-md bg-white border border-slate-200 p-0.5 shadow-2xs shrink-0"
         />
         <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 hidden sm:inline">
-          Offnot Energy
+          {settings.pwaShortName || 'Offnot Energy'}
         </span>
         <span className="text-slate-300 hidden sm:inline" aria-hidden="true">
           /

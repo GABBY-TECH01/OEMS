@@ -480,6 +480,14 @@ export interface CompanySettings {
   warehouses: string[];
   minGrossMarginPercent: number; // e.g. 10%
   receiptFooterMessage: string;
+  // Dynamic Admin PWA Branding & Installation Customization
+  pwaAppTitle?: string;
+  pwaShortName?: string;
+  pwaLogoUrl?: string;
+  pwaThemeColor?: string;
+  pwaBackgroundColor?: string;
+  enablePwaPrompt?: boolean;
+  pwaPromptDelaySeconds?: number;
 }
 
 export type KpiStatus = 'pending_acceptance' | 'active' | 'under_review' | 'completed' | 'exceeded';

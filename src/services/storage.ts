@@ -192,6 +192,13 @@ export const INITIAL_SETTINGS: CompanySettings = {
   ],
   minGrossMarginPercent: 12,
   receiptFooterMessage: 'Thank you for choosing Offnot Energy! Clean Energy, Stronger Tomorrow. Official stamped receipt.',
+  pwaAppTitle: 'Offnot Energy Management System',
+  pwaShortName: 'OffnotEnergy',
+  pwaLogoUrl: '/pwa-512x512.png',
+  pwaThemeColor: '#064e3b',
+  pwaBackgroundColor: '#0f172a',
+  enablePwaPrompt: true,
+  pwaPromptDelaySeconds: 2,
 };
 
 export const INITIAL_BRANCHES: Branch[] = [

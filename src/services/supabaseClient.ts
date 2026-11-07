@@ -33,6 +33,18 @@ export interface MigrationFile {
 
 export const MIGRATION_FILES: MigrationFile[] = [
   {
+    filename: '09_company_logo_and_pwa_icons_patch.sql',
+    title: '🎨 Company Logo & Dynamic PWA Manifest Patch',
+    description: 'Stores Superadmin uploaded company logo URL in company_settings, creates company-assets storage bucket, and dynamically syncs PWA manifest icons.',
+    category: 'master',
+  },
+  {
+    filename: '08_pwa_customizer_and_offline_sync_patch.sql',
+    title: '📱 PWA Mobile App Customizer & Pop-up Sync Patch',
+    description: 'Adds pwa_app_title, pwa_short_name, pwa_logo_url, and enable_pwa_prompt columns to company_settings for Superadmin app personalization.',
+    category: 'master',
+  },
+  {
     filename: '07_kpi_and_auth_patch.sql',
     title: '🏆 KPI Performance Hub & Password Fix Patch',
     description: 'Creates staff_kpis and kpi_daily_logs tables with RLS policies, ensures password persistence, and enables live multi-device KPI logging.',

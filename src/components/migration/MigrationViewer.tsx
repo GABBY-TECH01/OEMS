@@ -35,6 +35,8 @@ import {
 } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
 
+import logoPatchSql from '../../migration/09_company_logo_and_pwa_icons_patch.sql?raw';
+import pwaPatchSql from '../../migration/08_pwa_customizer_and_offline_sync_patch.sql?raw';
 import kpiPatchSql from '../../migration/07_kpi_and_auth_patch.sql?raw';
 import patchSql from '../../migration/06_incremental_handshake_patch.sql?raw';
 import masterSql from '../../migration/05_complete_migration_single_file.sql?raw';
@@ -46,7 +48,7 @@ import seedSql from '../../migration/04_seed_data.sql?raw';
 export const MigrationViewer: React.FC = () => {
   const { branches, users, categories, suppliers, products, customers, settings, isSupabaseConnected, syncWithSupabase, supabaseSyncTime, supabaseLoading } = useApp();
 
-  const [selectedFile, setSelectedFile] = useState<string>('07_kpi_and_auth_patch.sql');
+  const [selectedFile, setSelectedFile] = useState<string>('09_company_logo_and_pwa_icons_patch.sql');
   const [copied, setCopied] = useState(false);
   const [inputUrl, setInputUrl] = useState<string>(getSupabaseUrl());
   const [inputAnonKey, setInputAnonKey] = useState<string>(getSupabaseAnonKey());
@@ -186,6 +188,10 @@ export const MigrationViewer: React.FC = () => {
 
   const getSqlContent = (filename: string): string => {
     switch (filename) {
+      case '09_company_logo_and_pwa_icons_patch.sql':
+        return logoPatchSql;
+      case '08_pwa_customizer_and_offline_sync_patch.sql':
+        return pwaPatchSql;
       case '07_kpi_and_auth_patch.sql':
         return kpiPatchSql;
       case '06_incremental_handshake_patch.sql':

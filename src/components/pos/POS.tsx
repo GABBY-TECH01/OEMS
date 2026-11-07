@@ -437,7 +437,7 @@ export const POS: React.FC = () => {
       </div>
 
       {/* Right 5 Columns: Interactive Sales Cart & Checkout */}
-      <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[calc(100vh-140px)] sticky top-20">
+      <div id="pos-checkout-section" className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[calc(100vh-140px)] sticky top-20">
         {/* Cart Top: Customer & Tier Bar */}
         <div className="p-4 border-b border-slate-100 space-y-3 bg-slate-50/50 rounded-t-2xl">
           <div className="flex items-center justify-between">
@@ -998,6 +998,35 @@ export const POS: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Sticky Bottom Quick Cart / Checkout Bar for Mobile Screens */}
+      {cart.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden p-3 bg-slate-900/95 backdrop-blur-md text-white border-t border-slate-800 shadow-2xl flex items-center justify-between gap-3 animate-slide-up">
+          <div>
+            <div className="text-[10px] text-slate-400 uppercase font-semibold">
+              Cart ({cart.reduce((sum, item) => sum + item.quantity, 0)} items)
+            </div>
+            <div className="text-base font-bold text-emerald-400 font-mono">
+              {formatNaira(grandTotal)}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const cartElement = document.getElementById('pos-checkout-section');
+              if (cartElement) {
+                cartElement.scrollIntoView({ behavior: 'smooth' });
+              } else {
+                setShowPaymentModal(true);
+              }
+            }}
+            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-2"
+          >
+            <ShoppingCart className="w-4 h-4" />
+            <span>View Cart &amp; Pay</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

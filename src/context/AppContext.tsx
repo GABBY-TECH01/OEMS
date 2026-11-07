@@ -64,6 +64,7 @@ import {
   deleteKpiFromSupabase,
 } from '../services/supabaseDataService';
 import { IndexedDbService, PendingTransaction } from '../services/indexedDbService';
+import { updatePWABrandingAndManifest } from '../utils/pwaUpdater';
 
 export type { ActiveTab };
 
@@ -252,6 +253,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [staffAccounts, setStaffAccounts] = useState<StaffAccount[]>(StorageService.getStaffAccounts());
   const [rolePermissions, setRolePermissions] = useState<RolePermissionsMap>(StorageService.getRolePermissions());
   const [settings, setSettings] = useState<CompanySettings>(StorageService.getSettings());
+
+  // Automatically update document title, theme color meta, favicon, and dynamic PWA manifest on settings change
+  useEffect(() => {
+    updatePWABrandingAndManifest(settings);
+  }, [settings]);
   const [users, setUsers] = useState<User[]>(StorageService.getUsers());
   const [currentUser, setCurrentUserState] = useState<User>(
     initialSession?.user || StorageService.getCurrentUser()
@@ -1616,9 +1622,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       userRole: currentUser.role,
       action: 'UPDATE_SETTINGS',
       module: 'settings',
-      details: 'Updated company configuration, warehouses and policy settings.',
+      details: 'Updated company configuration, warehouses, PWA branding, and policy settings.',
     });
     setAuditLogs(StorageService.getAuditLogs());
+
+    // Live cloud persistence to Supabase with offline queue fallback
+    if (isSupabaseConfigured()) {
+      saveSettingsToSupabase(newSettings).catch(err => {
+        console.warn('saveSettingsToSupabase error, queuing offline:', err);
+        StorageService.enqueueOfflineItem('product', 'update', newSettings);
+      });
+    }
   };
 
   const markNotificationRead = (id: string) => {

@@ -391,6 +391,13 @@ export async function fetchAllDataFromSupabase(): Promise<SupabaseDataset | null
           'Dalute Road Retail Depot, Ibadan',
         ],
         receiptFooterMessage: s.receipt_footer_message || 'Thank you for choosing Offnot Energy! Clean Energy, Stronger Tomorrow.',
+        pwaAppTitle: s.pwa_app_title || 'Offnot Energy Management System',
+        pwaShortName: s.pwa_short_name || 'OffnotEnergy',
+        pwaLogoUrl: s.pwa_logo_url || '/pwa-512x512.png',
+        pwaThemeColor: s.pwa_theme_color || '#064e3b',
+        pwaBackgroundColor: s.pwa_background_color || '#0f172a',
+        enablePwaPrompt: s.enable_pwa_prompt !== false,
+        pwaPromptDelaySeconds: Number(s.pwa_prompt_delay_seconds || 2),
       };
     }
 
@@ -957,6 +964,13 @@ export async function saveSettingsToSupabase(settings: CompanySettings): Promise
       enable_tax_by_default: Boolean(settings.enableTaxByDefault),
       min_gross_margin_percent: settings.minGrossMarginPercent,
       receipt_footer_message: settings.receiptFooterMessage,
+      pwa_app_title: settings.pwaAppTitle || 'Offnot Energy Management System',
+      pwa_short_name: settings.pwaShortName || 'OffnotEnergy',
+      pwa_logo_url: settings.pwaLogoUrl || '/pwa-512x512.png',
+      pwa_theme_color: settings.pwaThemeColor || '#064e3b',
+      pwa_background_color: settings.pwaBackgroundColor || '#0f172a',
+      enable_pwa_prompt: settings.enablePwaPrompt !== false,
+      pwa_prompt_delay_seconds: settings.pwaPromptDelaySeconds || 2,
       updated_at: new Date().toISOString(),
     };
 

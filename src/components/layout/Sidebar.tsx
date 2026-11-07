@@ -42,6 +42,7 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
     logout,
     theme,
     toggleTheme,
+    settings,
   } = useApp();
 
   const lowStockCount = products.filter(p => p.currentStock <= p.reorderLevel).length;
@@ -195,19 +196,22 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
         <div className="h-16 px-4 flex items-center gap-3 border-b border-slate-800 bg-slate-950/80">
           <div className="w-10 h-10 rounded-xl bg-white p-1 shadow-sm shrink-0 flex items-center justify-center overflow-hidden border border-slate-700">
             <img
-              src={BRAND_LOGO_URL}
-              alt="Offnot Energy Logo"
+              src={settings.pwaLogoUrl || BRAND_LOGO_URL}
+              alt="Company Logo"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = BRAND_LOGO_URL;
+              }}
               className="w-full h-full object-contain"
             />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-bold tracking-tight text-white uppercase truncate">
-                Offnot Energy
+                {settings.pwaShortName || settings.companyName || 'Offnot Energy'}
               </span>
             </div>
             <p className="text-[10px] text-emerald-400 font-medium truncate">
-              Clean Energy, Stronger Tomorrow
+              {settings.slogan || 'Clean Energy, Stronger Tomorrow'}
             </p>
           </div>
         </div>
