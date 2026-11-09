@@ -25,6 +25,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { BRAND_LOGO_URL } from '../../constants/branding';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
+import { PWAInstallButton } from '../common/PWAInstallButton';
 
 export const LoginView: React.FC = () => {
   const { login, theme, toggleTheme } = useApp();
@@ -280,7 +281,7 @@ export const LoginView: React.FC = () => {
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     placeholder="e.g. your work email or username"
-                    className="w-full pl-10 pr-3.5 py-2.5 text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                    className="w-full pl-10 pr-3.5 py-2.5 text-base sm:text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                   />
                 </div>
               </div>
@@ -313,7 +314,7 @@ export const LoginView: React.FC = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="w-full pl-10 pr-10 py-2.5 text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-mono"
+                    className="w-full pl-10 pr-10 py-2.5 text-base sm:text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-mono"
                   />
                   <button
                     type="button"
@@ -427,7 +428,7 @@ export const LoginView: React.FC = () => {
                     value={recoveryEmail}
                     onChange={(e) => setRecoveryEmail(e.target.value)}
                     placeholder="e.g. bolanle@offnotenergy.com"
-                    className="w-full pl-10 pr-3.5 py-2.5 text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                    className="w-full pl-10 pr-3.5 py-2.5 text-base sm:text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                   />
                 </div>
               </div>
@@ -503,7 +504,7 @@ export const LoginView: React.FC = () => {
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Minimum 6 characters"
-                      className="w-full pl-10 pr-10 py-2.5 text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                      className="w-full pl-10 pr-10 py-2.5 text-base sm:text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
                     />
                     <button
                       type="button"
@@ -529,7 +530,7 @@ export const LoginView: React.FC = () => {
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Re-type new password"
-                      className="w-full pl-10 pr-3.5 py-2.5 text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                      className="w-full pl-10 pr-3.5 py-2.5 text-base sm:text-sm bg-slate-950/80 border border-slate-700/90 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
                     />
                   </div>
                 </div>
@@ -552,6 +553,9 @@ export const LoginView: React.FC = () => {
             )}
           </div>
         )}
+
+        {/* Dedicated PWA Mobile App Download Hub (Appears Exclusively on Login) */}
+        <PWAInstallButton variant="login" />
 
         {/* Footer */}
         <div className="mt-6 text-center text-xs text-slate-500 flex items-center justify-center gap-2">

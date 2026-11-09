@@ -69,14 +69,17 @@ export function updatePWABrandingAndManifest(settings: PWABrandingOptions): void
 
   // 6. Dynamically Generate and Inject Updated Web App Manifest via Blob URL
   const manifestData = {
-    id: '/',
+    id: 'com.offnotenergy.pos',
     name: title,
     short_name: shortName,
     description: description,
-    start_url: '/',
+    start_url: '/?standalone=true',
     scope: '/',
     display: 'standalone',
+    display_override: ['standalone', 'window-controls-overlay', 'minimal-ui'],
     orientation: 'portrait-primary',
+    categories: ['business', 'productivity', 'finance'],
+    prefer_related_applications: false,
     background_color: bgColor,
     theme_color: themeColor,
     icons: [

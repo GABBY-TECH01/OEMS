@@ -437,7 +437,7 @@ export const POS: React.FC = () => {
       </div>
 
       {/* Right 5 Columns: Interactive Sales Cart & Checkout */}
-      <div id="pos-checkout-section" className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[calc(100vh-140px)] sticky top-20">
+      <div id="pos-checkout-section" className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col min-h-[520px] lg:h-[calc(100vh-140px)] static lg:sticky lg:top-20">
         {/* Cart Top: Customer & Tier Bar */}
         <div className="p-4 border-b border-slate-100 space-y-3 bg-slate-50/50 rounded-t-2xl">
           <div className="flex items-center justify-between">

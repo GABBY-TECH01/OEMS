@@ -13,16 +13,19 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'icon.svg'],
         manifest: {
-          id: '/',
+          id: 'com.offnotenergy.pos',
           name: 'Offnot Energy Management System',
           short_name: 'OffnotEnergy',
           description: 'Enterprise Solar ERP & POS with real-time inventory, sales, expenses, and offline-first synchronization.',
           theme_color: '#064e3b',
           background_color: '#0f172a',
           display: 'standalone',
+          display_override: ['standalone', 'window-controls-overlay', 'minimal-ui'],
           orientation: 'portrait-primary',
-          start_url: '/',
+          start_url: '/?standalone=true',
           scope: '/',
+          categories: ['business', 'productivity', 'finance'],
+          prefer_related_applications: false,
           icons: [
             {
               src: '/pwa-192x192.png',

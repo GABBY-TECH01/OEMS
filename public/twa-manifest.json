@@ -1,0 +1,33 @@
+{
+  "packageId": "com.offnotenergy.pos",
+  "host": "ais-dev-bc3xuppc3ehcz7ktbbzt3d-648149388790.europe-west2.run.app",
+  "name": "Offnot Energy Management System",
+  "launcherName": "OffnotEnergy",
+  "themeColor": "#064e3b",
+  "navigationColor": "#064e3b",
+  "backgroundColor": "#0f172a",
+  "enableNotifications": true,
+  "startUrl": "/?standalone=true",
+  "iconUrl": "/pwa-512x512.png",
+  "maskableIconUrl": "/pwa-maskable-512x512.png",
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": false
+    },
+    "playBilling": {
+      "enabled": false
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false
+}

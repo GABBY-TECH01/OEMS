@@ -21,14 +21,18 @@ import {
   Eye,
   EyeOff,
   X,
+  Menu,
 } from 'lucide-react';
 import { useApp, ActiveTab } from '../../context/AppContext';
 import { getRoleLabel } from '../../utils/formatters';
 import { UserRole } from '../../types';
 import { BRAND_LOGO_URL } from '../../constants/branding';
-import { PWAInstallButton } from '../common/PWAInstallButton';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  onOpenSidebar?: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
   const {
     activeTab,
     setActiveTab,
@@ -123,16 +127,26 @@ export const Header: React.FC = () => {
       : branches.find(b => b.id === activeBranchId)?.name || 'Select Branch';
 
   return (
-    <header className="sticky top-0 z-30 h-16 bg-white border-b border-slate-200 px-4 md:px-6 flex items-center justify-between gap-4 select-none">
+    <header className="sticky top-0 z-30 h-14 sm:h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-4 md:px-6 flex items-center justify-between gap-3 select-none">
       {/* Zone 1: Breadcrumb & Context */}
-      <div className="flex items-center gap-2.5 min-w-0">
+      <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+        {onOpenSidebar && (
+          <button
+            type="button"
+            onClick={onOpenSidebar}
+            className="md:hidden p-1.5 -ml-1 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg shrink-0 transition-colors"
+            aria-label="Open navigation menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
         <img
           src={settings.pwaLogoUrl || BRAND_LOGO_URL}
           alt={settings.companyName || 'Offnot Energy'}
           onError={(e) => {
             (e.target as HTMLImageElement).src = BRAND_LOGO_URL;
           }}
-          className="w-7 h-7 object-contain rounded-md bg-white border border-slate-200 p-0.5 shadow-2xs shrink-0"
+          className="w-7 h-7 object-contain rounded-md bg-white border border-slate-200 dark:border-slate-700 p-0.5 shadow-2xs shrink-0"
         />
         <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 hidden sm:inline">
           {settings.pwaShortName || 'Offnot Energy'}
@@ -380,9 +394,6 @@ export const Header: React.FC = () => {
             )}
           </div>
         )}
-
-        {/* Download / Install PWA App Button */}
-        <PWAInstallButton variant="header" />
 
         {/* Dark Mode Toggle Button */}
         <button
