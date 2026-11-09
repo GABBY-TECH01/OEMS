@@ -233,41 +233,41 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top Banner & Date Filter Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
               {activeBranch ? activeBranch.name : 'Offnot Energy (Consolidated View)'}
             </h2>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
               {activeBranch ? activeBranch.code : 'All Ibadan Branches'}
             </span>
           </div>
-          <p className="text-xs text-slate-600 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
             {activeBranch ? activeBranch.address || `${activeBranch.city}, Oyo State` : 'Consolidated performance across Tipper Garage, Dalute Road, and Iwo Road Hubs'}
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
           <button
             onClick={() => setActiveTab('branches')}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors whitespace-nowrap shadow-2xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/80 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800 rounded-lg transition-colors whitespace-nowrap shadow-2xs"
             title="View comparative sales and inventory performance across all branches with D3"
           >
-            <BarChart3 className="w-3.5 h-3.5 text-emerald-700" />
+            <BarChart3 className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
             <span>Branch D3 Overview</span>
           </button>
 
-          {/* Date Filter Tabs */}
-          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg text-xs font-medium overflow-x-auto">
+          {/* Date Filter Tabs - Seamless smooth horizontal swipe without native grey scrollbar */}
+          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-medium overflow-x-auto w-full sm:w-auto scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             {(['today', 'week', 'month', 'quarter', 'year', 'all'] as DateFilter[]).map(df => (
               <button
                 key={df}
                 onClick={() => setDateFilter(df)}
-                className={`px-3 py-1.5 rounded-md capitalize transition-colors whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-lg capitalize transition-all whitespace-nowrap ${
                   dateFilter === df
-                    ? 'bg-white text-slate-900 shadow-xs font-semibold'
-                    : 'text-slate-700 hover:text-slate-950'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 {df === 'all' ? 'All Time' : df}

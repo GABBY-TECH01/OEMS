@@ -402,35 +402,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: errors.length === 0, syncedCount: synced, errors: errors.length > 0 ? errors : undefined };
   }, [updateOfflineQueueCount]);
 
-  // Monitor network online / offline transitions
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      // Auto flush offline queue when reconnecting
-      flushOfflineSyncQueue().then(res => {
-        if (res.syncedCount > 0) {
-          console.log(`PWA Synced ${res.syncedCount} queued items to Supabase cloud.`);
-        }
-      });
-      if (isSupabaseConfigured()) {
-        syncWithSupabase();
-      }
-    };
-
-    const handleOffline = () => {
-      setIsOnline(false);
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, [flushOfflineSyncQueue]);
-
-
   const syncWithSupabase = useCallback(async (): Promise<boolean> => {
     if (!isSupabaseConfigured()) {
       setIsSupabaseConnected(false);
@@ -526,6 +497,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSupabaseLoading(false);
     }
   }, []);
+
+  // Monitor network online / offline transitions & trigger instant automatic sync
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      // Auto flush offline queue immediately when reconnecting
+      flushOfflineSyncQueue().then(res => {
+        if (res.syncedCount > 0) {
+          console.log(`Auto-synced ${res.syncedCount} queued items to Supabase cloud.`);
+        }
+      });
+      if (isSupabaseConfigured()) {
+        syncWithSupabase();
+      }
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [flushOfflineSyncQueue, syncWithSupabase]);
+
+  // Continuous Auto-Sync Engine:
+  // Automatically syncs pending offline records whenever connected to internet (no user click needed)
+  useEffect(() => {
+    if (isOnline && offlineQueueCount > 0 && !isSyncingOfflineQueue) {
+      const timer = setTimeout(() => {
+        flushOfflineSyncQueue();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isOnline, offlineQueueCount, isSyncingOfflineQueue, flushOfflineSyncQueue]);
+
+  // Periodic heartbeat auto-sync (every 5 seconds while queue has items and device is online)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (navigator.onLine && offlineQueueCount > 0 && !isSyncingOfflineQueue) {
+        flushOfflineSyncQueue();
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [offlineQueueCount, isSyncingOfflineQueue, flushOfflineSyncQueue]);
+
+  // Resume auto-sync on app visibility change (e.g. mobile user returning to app)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine && offlineQueueCount > 0 && !isSyncingOfflineQueue) {
+        flushOfflineSyncQueue();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [offlineQueueCount, isSyncingOfflineQueue, flushOfflineSyncQueue]);
 
   useEffect(() => {
     StorageService.initDatabase();

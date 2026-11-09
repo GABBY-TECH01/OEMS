@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Bell,
   Search,
@@ -22,6 +22,7 @@ import {
   EyeOff,
   X,
   Menu,
+  WifiOff,
 } from 'lucide-react';
 import { useApp, ActiveTab } from '../../context/AppContext';
 import { getRoleLabel } from '../../utils/formatters';
@@ -58,6 +59,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
     supabaseLoading,
     supabaseSyncTime,
     syncWithSupabase,
+    offlineQueueCount,
   } = useApp();
 
   const [showRoleMenu, setShowRoleMenu] = useState(false);
@@ -69,6 +71,30 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [showPwdText, setShowPwdText] = useState(false);
   const [passwordFeedback, setPasswordFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const closeAllDropdowns = () => {
+    setShowBranchMenu(false);
+    setShowRoleMenu(false);
+    setShowNotifications(false);
+    setShowUserMenu(false);
+  };
+
+  // Collapse all dropdowns whenever clicking/tapping any empty space outside
+  useEffect(() => {
+    const handleGlobalPointerDown = (event: MouseEvent | TouchEvent) => {
+      if (!showBranchMenu && !showRoleMenu && !showNotifications && !showUserMenu) return;
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (!target.closest('[data-dropdown]')) {
+        closeAllDropdowns();
+      }
+    };
+
+    document.addEventListener('pointerdown', handleGlobalPointerDown);
+    return () => {
+      document.removeEventListener('pointerdown', handleGlobalPointerDown);
+    };
+  }, [showBranchMenu, showRoleMenu, showNotifications, showUserMenu]);
 
   const unreadNotifications = notifications.filter(n => !n.read);
 
@@ -127,9 +153,19 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
       : branches.find(b => b.id === activeBranchId)?.name || 'Select Branch';
 
   return (
-    <header className="sticky top-0 z-30 h-14 sm:h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-4 md:px-6 flex items-center justify-between gap-3 select-none">
+    <header className="sticky top-0 z-30 h-14 sm:h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-2.5 sm:px-4 md:px-6 flex items-center justify-between gap-2 sm:gap-3 select-none">
+      {/* Invisible global backdrop that immediately collapses any open dropdown on click/touch outside */}
+      {(showBranchMenu || showRoleMenu || showNotifications || showUserMenu) && (
+        <div
+          className="fixed inset-0 z-40 bg-transparent"
+          onClick={closeAllDropdowns}
+          onTouchStart={closeAllDropdowns}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Zone 1: Breadcrumb & Context */}
-      <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+      <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 shrink">
         {onOpenSidebar && (
           <button
             type="button"
@@ -148,42 +184,47 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
           }}
           className="w-7 h-7 object-contain rounded-md bg-white border border-slate-200 dark:border-slate-700 p-0.5 shadow-2xs shrink-0"
         />
-        <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 hidden sm:inline">
+        <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 hidden md:inline">
           {settings.pwaShortName || 'Offnot Energy'}
         </span>
-        <span className="text-slate-300 hidden sm:inline" aria-hidden="true">
+        <span className="text-slate-300 hidden md:inline" aria-hidden="true">
           /
         </span>
-        <h1 className="text-sm md:text-base font-semibold text-slate-900 truncate">
+        <h1 className="text-xs sm:text-sm md:text-base font-bold text-slate-900 dark:text-white truncate max-w-[95px] sm:max-w-[170px] md:max-w-none">
           {getBreadcrumbTitle(activeTab)}
         </h1>
       </div>
 
       {/* Zone 2: Branch Indicator / Switcher */}
       {canAccessAllBranches ? (
-        <div className="relative">
+        <div className="relative" data-dropdown="branch">
           <button
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               setShowBranchMenu(!showBranchMenu);
               setShowRoleMenu(false);
               setShowUserMenu(false);
+              setShowNotifications(false);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg transition-all shadow-2xs"
+            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg transition-all shadow-2xs"
             title="Superadmin: Filter view by branch or view consolidated multi-branch analytics"
           >
             {activeBranchId === 'all' ? (
-              <Layers className="w-3.5 h-3.5 text-emerald-700" />
+              <Layers className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400 shrink-0" />
             ) : (
-              <Building2 className="w-3.5 h-3.5 text-emerald-700" />
+              <Building2 className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400 shrink-0" />
             )}
-            <span className="truncate max-w-[140px] sm:max-w-[210px] font-semibold text-slate-900">
+            <span className="hidden sm:inline truncate max-w-[130px] md:max-w-[210px] font-semibold text-slate-900 dark:text-white">
               {currentBranchName}
             </span>
-            <ChevronDown className="w-3 h-3 text-slate-400 opacity-80" />
+            <span className="sm:hidden font-bold text-slate-900 dark:text-white text-[11px] truncate max-w-[70px]">
+              {activeBranchId === 'all' ? 'All Hubs' : (branches.find(b => b.id === activeBranchId)?.code || 'Branch')}
+            </span>
+            <ChevronDown className="w-3 h-3 text-slate-400 opacity-80 shrink-0" />
           </button>
 
           {showBranchMenu && (
-            <div className="absolute left-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+            <div className="absolute left-0 sm:left-auto mt-2 w-72 max-w-[calc(100vw-24px)] bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
               <div className="px-3 py-2 border-b border-slate-100">
                 <p className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
                   <Building2 className="w-3.5 h-3.5 text-emerald-700" />
@@ -343,29 +384,42 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
       </div>
 
       {/* Zone 4: Role Switcher, Notifications & Profile */}
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {/* Offline Queued Indicator Pill in Header */}
+        {offlineQueueCount > 0 && (
+          <span
+            className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-700 flex items-center gap-1 shrink-0"
+            title={`${offlineQueueCount} offline records stored in IndexedDB awaiting cloud sync`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+            <span>{offlineQueueCount} Queued</span>
+          </span>
+        )}
+
         {/* Quick Role Tester - STRICTLY restricted to Super Administrator */}
         {currentUser.role === 'super_admin' && (
-          <div className="relative hidden md:block">
+          <div className="relative hidden md:block" data-dropdown="role">
             <button
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 setShowRoleMenu(!showRoleMenu);
                 setShowBranchMenu(false);
                 setShowUserMenu(false);
+                setShowNotifications(false);
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors whitespace-nowrap"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-emerald-900 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/80 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 rounded-lg transition-colors whitespace-nowrap"
               title="Superadmin: Switch active role to test permissions"
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
               <span className="hidden lg:inline">{getRoleLabel(currentUser.role)}</span>
               <span className="lg:hidden">{currentUser.name.split(' ')[0]}</span>
               <ChevronDown className="w-3 h-3 text-emerald-700 opacity-70" />
             </button>
 
             {showRoleMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-3 py-2 border-b border-slate-100">
-                  <p className="text-xs font-semibold text-slate-900">Switch Active Test Role</p>
+              <div className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-24px)] bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-200 dark:border-slate-800 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800">
+                  <p className="text-xs font-semibold text-slate-900 dark:text-white">Switch Active Test Role</p>
                   <p className="text-[11px] text-slate-500">Superadmin: Verify role-based permissions</p>
                 </div>
                 <div className="max-h-64 overflow-y-auto py-1">
@@ -380,12 +434,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
                         }}
                         className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
                           isActive
-                            ? 'bg-emerald-50 text-emerald-900 font-semibold'
-                            : 'text-slate-700 hover:bg-slate-50'
+                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-300 font-semibold'
+                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                         }`}
                       >
                         <span>{r.label}</span>
-                        {isActive && <Check className="w-3.5 h-3.5 text-emerald-700" />}
+                        {isActive && <Check className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />}
                       </button>
                     );
                   })}
@@ -395,11 +449,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
           </div>
         )}
 
-        {/* Dark Mode Toggle Button */}
+        {/* Dark Mode Toggle - Hidden on narrow mobile to give space; accessible in user profile & sidebar */}
         <button
           type="button"
           onClick={toggleTheme}
-          className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center"
+          className="hidden sm:flex p-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors items-center justify-center"
           title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
           aria-label="Toggle dark mode"
         >
@@ -411,15 +465,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
         </button>
 
         {/* Notifications Dropdown */}
-        <div className="relative">
+        <div className="relative" data-dropdown="notifications">
           <button
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               setShowNotifications(!showNotifications);
               setShowRoleMenu(false);
               setShowBranchMenu(false);
               setShowUserMenu(false);
             }}
-            className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+            className="relative p-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
             title="System Notifications & Alerts"
           >
             <Bell className="w-4 h-4" />
@@ -429,13 +484,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
-              <div className="flex items-center justify-between px-4 py-1.5 border-b border-slate-100">
-                <span className="text-xs font-semibold text-slate-900">Notifications</span>
+            <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-24px)] bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-200 dark:border-slate-800 py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+              <div className="flex items-center justify-between px-4 py-1.5 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-xs font-semibold text-slate-900 dark:text-white">Notifications</span>
                 {unreadNotifications.length > 0 && (
                   <button
                     onClick={markAllNotificationsRead}
-                    className="text-[11px] font-medium text-emerald-700 hover:underline"
+                    className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 hover:underline"
                   >
                     Mark all read
                   </button>
@@ -467,14 +522,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
         </div>
 
         {/* User Profile & Menu */}
-        <div className="relative pl-1 border-l border-slate-200">
+        <div className="relative pl-1 border-l border-slate-200 dark:border-slate-800" data-dropdown="user">
           <button
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               setShowUserMenu(!showUserMenu);
               setShowRoleMenu(false);
               setShowBranchMenu(false);
+              setShowNotifications(false);
             }}
-            className="flex items-center gap-2 p-1 rounded-lg hover:bg-slate-100 transition-colors text-left"
+            className="flex items-center gap-2 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
           >
             <div className="w-7 h-7 rounded-full bg-emerald-900 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
               {currentUser.name[0]}
@@ -489,16 +546,31 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
           </button>
 
           {showUserMenu && (
-            <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
-              <div className="px-3 py-2 border-b border-slate-100">
-                <p className="text-xs font-semibold text-slate-900">{currentUser.name}</p>
+            <div className="absolute right-0 mt-2 w-56 max-w-[calc(100vw-24px)] bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+              <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800">
+                <p className="text-xs font-semibold text-slate-900 dark:text-white">{currentUser.name}</p>
                 <p className="text-[11px] text-slate-500 font-mono truncate">{currentUser.email}</p>
-                <span className="mt-1 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800">
+                <span className="mt-1 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
                   {getRoleLabel(currentUser.role)}
                 </span>
               </div>
 
               <div className="py-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleTheme();
+                    setShowUserMenu(false);
+                  }}
+                  className="sm:hidden w-full text-left px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between"
+                >
+                  <span className="flex items-center gap-2">
+                    {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-slate-600" />}
+                    <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">{theme === 'dark' ? 'Dark' : 'Light'}</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
