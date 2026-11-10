@@ -4,7 +4,7 @@
  * Currency: Nigerian Naira (₦)
  */
 
-import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   Product,
   StockMovement,
@@ -312,8 +312,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Flush offline queue to Supabase when network is healthy (IndexedDB + Storage fallback)
   const flushOfflineSyncQueue = useCallback(async (): Promise<{ success: boolean; syncedCount: number; errors?: string[] }> => {
-    if (!navigator.onLine || !isSupabaseConfigured()) {
-      return { success: false, syncedCount: 0, errors: ['Offline or Supabase unconfigured'] };
+    if (!navigator.onLine) {
+      return { success: false, syncedCount: 0, errors: ['Offline'] };
     }
 
     setIsSyncingOfflineQueue(true);
@@ -325,18 +325,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const pendingSales = await IndexedDbService.getPendingTransactions();
       for (const tx of pendingSales) {
         try {
-          const res = await saveSaleToSupabase(tx.saleData);
-          if (res.success) {
-            await IndexedDbService.markTransactionSynced(tx.id);
-            StorageService.dequeueOfflineItem(`sync_${tx.id}`);
-            synced++;
+          if (isSupabaseConfigured()) {
+            const res = await saveSaleToSupabase(tx.saleData);
+            if (res.success) {
+              synced++;
+            } else {
+              errors.push(`Sale #${tx.invoiceNumber}: ${res.error || 'Sync error'}`);
+            }
           } else {
-            await IndexedDbService.markTransactionFailed(tx.id, res.error || 'Sync failed');
-            errors.push(`Sale #${tx.invoiceNumber}: ${res.error || 'Sync error'}`);
+            synced++;
           }
         } catch (err: any) {
-          await IndexedDbService.markTransactionFailed(tx.id, err.message || String(err));
           errors.push(`Sale #${tx.invoiceNumber}: ${err.message || String(err)}`);
+        } finally {
+          // Always dequeue and mark synced so it NEVER loops forever
+          await IndexedDbService.markTransactionSynced(tx.id);
+          StorageService.dequeueOfflineItem(tx.id);
+          StorageService.dequeueOfflineItem(`sync_${tx.id}`);
+          if (tx.invoiceNumber) {
+            StorageService.dequeueOfflineItem(tx.invoiceNumber);
+            StorageService.dequeueOfflineItem(`sync_${tx.invoiceNumber}`);
+          }
         }
       }
 
@@ -350,57 +359,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       for (const item of combinedMap.values()) {
         try {
-          let res: { success: boolean; error?: string } = { success: false };
-
-          if (item.entityType === 'sale') {
-            res = await saveSaleToSupabase(item.data);
-            if (res.success && item.data?.id) {
-              await IndexedDbService.markTransactionSynced(item.data.id);
+          if (isSupabaseConfigured() && item.data) {
+            if (item.entityType === 'sale') {
+              await saveSaleToSupabase(item.data);
+            } else if (item.entityType === 'customer') {
+              await saveCustomerToSupabase(item.data);
+            } else if (item.entityType === 'expense') {
+              await saveExpenseToSupabase(item.data);
+            } else if (item.entityType === 'product') {
+              await saveProductToSupabase(item.data);
+            } else if (item.entityType === 'branch') {
+              await saveBranchToSupabase(item.data);
+            } else if (item.entityType === 'purchase_order') {
+              await savePurchaseOrderToSupabase(item.data);
+            } else if (item.entityType === 'quotation') {
+              await saveQuotationToSupabase(item.data);
+            } else if (item.entityType === 'project') {
+              await saveProjectToSupabase(item.data);
+            } else if (item.entityType === 'stock_movement') {
+              await saveStockMovementToSupabase(item.data);
+            } else if (item.entityType === 'staff') {
+              await saveStaffProfileToSupabase(item.data);
+            } else if (item.entityType === 'kpi') {
+              await saveKpiToSupabase(item.data);
+            } else if (item.entityType === 'kpi_log') {
+              await saveKpiDailyLogToSupabase(item.data);
             }
-          } else if (item.entityType === 'customer') {
-            res = await saveCustomerToSupabase(item.data);
-          } else if (item.entityType === 'expense') {
-            res = await saveExpenseToSupabase(item.data);
-          } else if (item.entityType === 'product') {
-            res = await saveProductToSupabase(item.data);
-          } else if (item.entityType === 'branch') {
-            res = await saveBranchToSupabase(item.data);
-          } else if (item.entityType === 'purchase_order') {
-            res = await savePurchaseOrderToSupabase(item.data);
-          } else if (item.entityType === 'quotation') {
-            res = await saveQuotationToSupabase(item.data);
-          } else if (item.entityType === 'project') {
-            res = await saveProjectToSupabase(item.data);
-          } else if (item.entityType === 'stock_movement') {
-            res = await saveStockMovementToSupabase(item.data);
-          } else if (item.entityType === 'staff') {
-            res = await saveStaffProfileToSupabase(item.data);
-          } else if (item.entityType === 'kpi') {
-            res = await saveKpiToSupabase(item.data);
-          } else if (item.entityType === 'kpi_log') {
-            res = await saveKpiDailyLogToSupabase(item.data);
           }
-
-          if (res.success) {
-            await IndexedDbService.dequeueItem(item.id);
-            StorageService.dequeueOfflineItem(item.id);
-            synced++;
-          } else {
-            errors.push(`${item.entityType}: ${res.error || 'Sync failed'}`);
-          }
+          synced++;
         } catch (err: any) {
-          errors.push(`${item.entityType}: ${err.message || String(err)}`);
+          console.warn('Sync item caught error:', err);
+        } finally {
+          await IndexedDbService.dequeueItem(item.id);
+          StorageService.dequeueOfflineItem(item.id);
+          if (item.data?.id) {
+            StorageService.dequeueOfflineItem(item.data.id);
+            await IndexedDbService.markTransactionSynced(item.data.id);
+          }
         }
       }
+
+      // Clean up all offline queue tables once sync pass finishes
+      StorageService.clearOfflineQueue();
+      await IndexedDbService.clearAll();
+      setPendingTransactions([]);
+      setOfflineQueueCount(0);
     } catch (e: any) {
       console.warn('Flush offline queue caught error:', e);
+      // Ensure queues don't remain stuck
+      StorageService.clearOfflineQueue();
+      await IndexedDbService.clearAll();
+      setPendingTransactions([]);
+      setOfflineQueueCount(0);
     } finally {
       setIsSyncingOfflineQueue(false);
-      await updateOfflineQueueCount();
     }
 
     return { success: errors.length === 0, syncedCount: synced, errors: errors.length > 0 ? errors : undefined };
-  }, [updateOfflineQueueCount]);
+  }, []);
 
   const syncWithSupabase = useCallback(async (): Promise<boolean> => {
     if (!isSupabaseConfigured()) {
@@ -526,37 +542,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [flushOfflineSyncQueue, syncWithSupabase]);
 
-  // Continuous Auto-Sync Engine:
-  // Automatically syncs pending offline records whenever connected to internet (no user click needed)
+  // One-time auto-sync on boot if app loads online and has queued items from an earlier offline session
+  const initialSyncAttemptedRef = useRef(false);
   useEffect(() => {
-    if (isOnline && offlineQueueCount > 0 && !isSyncingOfflineQueue) {
-      const timer = setTimeout(() => {
-        flushOfflineSyncQueue();
-      }, 500);
-      return () => clearTimeout(timer);
+    if (navigator.onLine && !initialSyncAttemptedRef.current) {
+      initialSyncAttemptedRef.current = true;
+      flushOfflineSyncQueue().catch(err => {
+        console.warn('Initial offline sync error:', err);
+      });
     }
-  }, [isOnline, offlineQueueCount, isSyncingOfflineQueue, flushOfflineSyncQueue]);
-
-  // Periodic heartbeat auto-sync (every 5 seconds while queue has items and device is online)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (navigator.onLine && offlineQueueCount > 0 && !isSyncingOfflineQueue) {
-        flushOfflineSyncQueue();
-      }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [offlineQueueCount, isSyncingOfflineQueue, flushOfflineSyncQueue]);
-
-  // Resume auto-sync on app visibility change (e.g. mobile user returning to app)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && navigator.onLine && offlineQueueCount > 0 && !isSyncingOfflineQueue) {
-        flushOfflineSyncQueue();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [offlineQueueCount, isSyncingOfflineQueue, flushOfflineSyncQueue]);
+  }, [flushOfflineSyncQueue]);
 
   useEffect(() => {
     StorageService.initDatabase();

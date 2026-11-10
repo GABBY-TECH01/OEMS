@@ -1830,9 +1830,9 @@ export const StorageService = {
     action: 'create' | 'update' | 'delete',
     data: any
   ): OfflineSyncItem {
-    const queue = this.getOfflineQueue();
+    const recordId = data?.id || data?.invoiceNumber;
     const item: OfflineSyncItem = {
-      id: `sync_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: recordId ? `sync_${recordId}` : `sync_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       entityType,
       action,
       data,
@@ -1840,12 +1840,12 @@ export const StorageService = {
       retryCount: 0,
     };
     
+    const queue = this.getOfflineQueue();
     // Avoid duplicate sync items for exact same record id and entity
-    const recordId = data?.id || data?.invoiceNumber;
     let updatedQueue: OfflineSyncItem[];
     if (recordId) {
       updatedQueue = queue.filter(
-        q => !(q.entityType === entityType && (q.data?.id === recordId || q.data?.invoiceNumber === recordId))
+        (q: OfflineSyncItem) => !(q.entityType === entityType && (q.data?.id === recordId || q.data?.invoiceNumber === recordId))
       );
       updatedQueue.push(item);
     } else {
@@ -1860,9 +1860,14 @@ export const StorageService = {
     return item;
   },
 
-  dequeueOfflineItem(itemId: string): void {
+  dequeueOfflineItem(itemIdOrRecordId: string): void {
     const queue = this.getOfflineQueue();
-    const filtered = queue.filter(q => q.id !== itemId);
+    const filtered = queue.filter(q => {
+      if (q.id === itemIdOrRecordId) return false;
+      if (q.data?.id && (q.data.id === itemIdOrRecordId || `sync_${q.data.id}` === itemIdOrRecordId)) return false;
+      if (q.data?.invoiceNumber && (q.data.invoiceNumber === itemIdOrRecordId || `sync_${q.data.invoiceNumber}` === itemIdOrRecordId)) return false;
+      return true;
+    });
     try {
       localStorage.setItem(STORAGE_KEYS.OFFLINE_SYNC_QUEUE, JSON.stringify(filtered));
     } catch (e) {

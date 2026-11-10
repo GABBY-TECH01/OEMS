@@ -94,11 +94,9 @@ export const IndexedDbService = {
    */
   async markTransactionSynced(transactionId: string): Promise<void> {
     try {
-      await offlineDb.pendingTransactions.update(transactionId, {
-        status: 'synced',
-        syncedAt: new Date().toISOString(),
-      });
+      await offlineDb.pendingTransactions.delete(transactionId);
       await offlineDb.offlineQueue.delete(`sync_${transactionId}`);
+      await offlineDb.offlineQueue.delete(transactionId);
     } catch (e) {
       console.warn('IndexedDB markTransactionSynced error:', e);
     }
@@ -164,6 +162,12 @@ export const IndexedDbService = {
   async dequeueItem(itemId: string): Promise<void> {
     try {
       await offlineDb.offlineQueue.delete(itemId);
+      if (itemId.startsWith('sync_')) {
+        const rawId = itemId.replace('sync_', '');
+        await offlineDb.pendingTransactions.delete(rawId);
+      } else {
+        await offlineDb.pendingTransactions.delete(itemId);
+      }
     } catch (e) {
       console.warn('IndexedDB dequeueItem error:', e);
     }

@@ -19,8 +19,8 @@ export const OfflineSyncBanner: React.FC = () => {
     prevCountRef.current = offlineQueueCount;
   }, [offlineQueueCount, isOnline]);
 
-  // When online and nothing is queued or syncing, completely disappear
-  if (isOnline && offlineQueueCount === 0 && !isSyncingOfflineQueue && !justSynced) {
+  // When online and not syncing/confirming, completely disappear
+  if (isOnline && !isSyncingOfflineQueue && !justSynced) {
     return null;
   }
 
@@ -42,15 +42,15 @@ export const OfflineSyncBanner: React.FC = () => {
         </div>
       )}
 
-      {/* 3. Online & currently auto-syncing in background */}
+      {/* 3. Online & actively auto-syncing queued records */}
       {isOnline && isSyncingOfflineQueue && (
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-950/95 text-emerald-200 border border-emerald-500/50 shadow-lg backdrop-blur-md text-xs font-bold animate-pulse pointer-events-auto">
           <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin shrink-0" />
-          <span>Syncing {offlineQueueCount > 0 ? offlineQueueCount : ''} offline sales...</span>
+          <span>Syncing {offlineQueueCount > 0 ? `${offlineQueueCount} ` : ''}records to cloud...</span>
         </div>
       )}
 
-      {/* 4. Sync complete confirmation (auto-dismisses after 2.5s) */}
+      {/* 4. Sync complete confirmation (auto-dismisses after 2s) */}
       {isOnline && justSynced && !isSyncingOfflineQueue && (
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-900/95 text-emerald-100 border border-emerald-400/60 shadow-lg backdrop-blur-md text-xs font-bold pointer-events-auto">
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />

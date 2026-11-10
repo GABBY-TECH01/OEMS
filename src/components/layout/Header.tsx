@@ -60,6 +60,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
     supabaseSyncTime,
     syncWithSupabase,
     offlineQueueCount,
+    isOnline,
   } = useApp();
 
   const [showRoleMenu, setShowRoleMenu] = useState(false);
@@ -385,8 +386,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
 
       {/* Zone 4: Role Switcher, Notifications & Profile */}
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-        {/* Offline Queued Indicator Pill in Header */}
-        {offlineQueueCount > 0 && (
+        {/* Offline Queued Indicator Pill in Header - ONLY visible when device is offline */}
+        {!isOnline && offlineQueueCount > 0 && (
           <span
             className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-700 flex items-center gap-1 shrink-0"
             title={`${offlineQueueCount} offline records stored in IndexedDB awaiting cloud sync`}
