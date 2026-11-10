@@ -33,6 +33,7 @@ import {
   KpiDailyLog,
   OfflineSyncItem,
   OfflineSyncEntityType,
+  SaleReturnRecord,
 } from '../types';
 
 export const STORAGE_KEYS = {
@@ -1748,20 +1749,33 @@ export const StorageService = {
     quantity: number,
     reason: string,
     user: User
-  ): { success: boolean; error?: string } {
+  ): {
+    success: boolean;
+    error?: string;
+    returnMovement?: StockMovement;
+    updatedProduct?: Product;
+    updatedSale?: Sale;
+    refundAmount?: number;
+  } {
     const sales = this.getSales();
     const sale = sales.find(s => s.id === saleId);
     if (!sale) return { success: false, error: 'Sale record not found.' };
 
     const item = sale.items.find(i => i.productId === productId);
     if (!item) return { success: false, error: 'Product was not part of this sale.' };
-    if (quantity > item.quantity) {
-      return { success: false, error: `Cannot return ${quantity} units. Customer bought ${item.quantity}.` };
+
+    const currentReturned = item.returnedQuantity || 0;
+    const availableToReturn = item.quantity - currentReturned;
+    if (quantity > availableToReturn) {
+      return {
+        success: false,
+        error: `Cannot return ${quantity} units. Customer bought ${item.quantity} (already returned: ${currentReturned}, remaining eligible: ${availableToReturn}).`,
+      };
     }
 
     const products = this.getProducts();
     const prod = products.find(p => p.id === productId);
-    if (!prod) return { success: false, error: 'Product not found.' };
+    if (!prod) return { success: false, error: 'Product not found in inventory catalog.' };
 
     const now = new Date().toISOString();
     const previousStock = prod.currentStock;
@@ -1769,10 +1783,18 @@ export const StorageService = {
     prod.currentStock = newStock;
     prod.updatedAt = now;
 
-    const refundAmount = (item.unitPrice * quantity) - ((item.discount / item.quantity) * quantity);
+    // Calculate proportional refund amount taking any item-level discount into account
+    const discountPortion = item.quantity > 0 ? (item.discount / item.quantity) * quantity : 0;
+    const refundAmount = Math.max(0, (item.unitPrice * quantity) - discountPortion);
+
+    // Update item-level return state
+    item.returnedQuantity = currentReturned + quantity;
+    if (item.returnedQuantity >= item.quantity) {
+      item.returned = true;
+    }
 
     const movement: StockMovement = {
-      id: `mov_ret_${Date.now()}`,
+      id: `mov_ret_${Date.now()}_${prod.sku}`,
       productId: prod.id,
       productName: prod.name,
       sku: prod.sku,
@@ -1783,16 +1805,54 @@ export const StorageService = {
       unitCost: item.unitCost,
       totalCost: quantity * item.unitCost,
       referenceId: sale.invoiceNumber,
-      warehouseLocation: sale.warehouseLocation,
+      warehouseLocation: sale.warehouseLocation || prod.warehouseLocation,
       branchId: sale.branchId || user.branchId,
       branchName: sale.branchName || user.branchName,
-      reason: `Customer return for #${sale.invoiceNumber}: ${reason}`,
+      reason: `Customer return & refund for #${sale.invoiceNumber}: ${reason}`,
       performedByUserId: user.id,
       performedByUserName: user.name,
       timestamp: now,
     };
 
+    const returnRecord: SaleReturnRecord = {
+      id: `ret_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      productId: prod.id,
+      productName: prod.name,
+      sku: prod.sku,
+      quantity,
+      refundAmount,
+      reason,
+      timestamp: now,
+      performedByUserName: user.name,
+      previousStock,
+      newStock,
+    };
+
     sale.returned = true;
+    sale.refunded = true;
+    sale.refundAmount = (sale.refundAmount || 0) + refundAmount;
+    sale.refundReason = reason;
+    sale.refundedAt = now;
+    sale.refundedBy = user.name;
+    sale.refundedByUserId = user.id;
+
+    if (!Array.isArray(sale.returnRecords)) {
+      sale.returnRecords = [];
+    }
+    sale.returnRecords.unshift(returnRecord);
+
+    // Update customer total purchases and ledger balance
+    const customers = this.getCustomers();
+    const custIndex = customers.findIndex(c => c.id === sale.customerId);
+    if (custIndex !== -1) {
+      customers[custIndex].totalPurchases = Math.max(0, customers[custIndex].totalPurchases - refundAmount);
+      if (sale.balanceDue > 0) {
+        const balReduction = Math.min(sale.balanceDue, refundAmount);
+        sale.balanceDue = Math.max(0, sale.balanceDue - balReduction);
+        customers[custIndex].outstandingBalance = Math.max(0, customers[custIndex].outstandingBalance - balReduction);
+      }
+      this.saveCustomers(customers);
+    }
 
     const movements = this.getStockMovements();
     this.saveProducts(products);
@@ -1806,10 +1866,16 @@ export const StorageService = {
       action: 'CUSTOMER_RETURN_PROCESSED',
       module: 'sales',
       recordId: sale.invoiceNumber,
-      details: `Returned ${quantity}x ${prod.name} for invoice #${sale.invoiceNumber}. Refund amount: ₦${refundAmount.toLocaleString()}. Reason: ${reason}`,
+      details: `Returned ${quantity}x ${prod.name} for invoice #${sale.invoiceNumber}. Restocked to ${prod.warehouseLocation} (+${quantity} units, new stock: ${newStock}). Refund amount: ₦${refundAmount.toLocaleString()}. Reason: ${reason}`,
     });
 
-    return { success: true };
+    return {
+      success: true,
+      returnMovement: movement,
+      updatedProduct: prod,
+      updatedSale: sale,
+      refundAmount,
+    };
   },
 
   // -------------------------------------------------------------------------

@@ -292,6 +292,22 @@ export interface SaleItem {
   quantity: number;
   discount: number;
   subtotal: number;
+  returned?: boolean;
+  returnedQuantity?: number;
+}
+
+export interface SaleReturnRecord {
+  id: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  quantity: number;
+  refundAmount: number;
+  reason: string;
+  timestamp: string;
+  performedByUserName: string;
+  previousStock: number;
+  newStock: number;
 }
 
 export interface Sale {
@@ -321,6 +337,13 @@ export interface Sale {
   createdAt: string;
   notes?: string;
   returned?: boolean;
+  refunded?: boolean;
+  refundAmount?: number;
+  refundReason?: string;
+  refundedAt?: string;
+  refundedBy?: string;
+  refundedByUserId?: string;
+  returnRecords?: SaleReturnRecord[];
 }
 
 export type QuotationStatus = 'draft' | 'pending_approval' | 'sent' | 'accepted' | 'rejected' | 'expired' | 'converted';

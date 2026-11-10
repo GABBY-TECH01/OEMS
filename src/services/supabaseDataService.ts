@@ -1088,3 +1088,57 @@ export async function deleteKpiFromSupabase(kpiId: string): Promise<{ success: b
   }
 }
 
+export async function saveSaleReturnToSupabase(
+  sale: Sale,
+  returnedProduct: Product,
+  movement: StockMovement
+): Promise<{ success: boolean; error?: string }> {
+  const client = getSupabaseClient();
+  if (!client || !isSupabaseConfigured()) return { success: false, error: 'Supabase is not configured' };
+
+  try {
+    // 1. Update product with restored current_stock in Supabase
+    await client.from('products').update({
+      current_stock: returnedProduct.currentStock,
+      updated_at: new Date().toISOString(),
+    }).eq('id', returnedProduct.id);
+
+    // 2. Update sale record with is_returned = true, updated items, refund details
+    await client.from('sales').update({
+      is_returned: true,
+      items: sale.items,
+      balance_due: sale.balanceDue,
+      notes: sale.notes || null,
+    }).eq('id', sale.id);
+
+    // 3. Record customer return movement in stock_movements
+    const movementRow = {
+      id: movement.id,
+      product_id: movement.productId,
+      product_name: movement.productName,
+      sku: movement.sku,
+      movement_type: 'customer_return',
+      quantity: movement.quantity,
+      previous_stock: movement.previousStock,
+      new_stock: movement.newStock,
+      unit_cost: movement.unitCost,
+      total_cost: movement.totalCost,
+      reference_id: movement.referenceId,
+      warehouse_location: movement.warehouseLocation,
+      branch_id: movement.branchId || null,
+      branch_name: movement.branchName || null,
+      reason: movement.reason,
+      performed_by_user_id: movement.performedByUserId || null,
+      performed_by_user_name: movement.performedByUserName,
+      timestamp: movement.timestamp,
+    };
+    await client.from('stock_movements').insert([movementRow]);
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('saveSaleReturnToSupabase error:', err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+

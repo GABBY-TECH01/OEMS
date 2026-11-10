@@ -62,6 +62,7 @@ import {
   saveKpiToSupabase,
   saveKpiDailyLogToSupabase,
   deleteKpiFromSupabase,
+  saveSaleReturnToSupabase,
 } from '../services/supabaseDataService';
 import { IndexedDbService, PendingTransaction } from '../services/indexedDbService';
 import { updatePWABrandingAndManifest } from '../utils/pwaUpdater';
@@ -178,7 +179,7 @@ interface AppContextType {
     branchId?: string;
     branchName?: string;
   }) => { success: boolean; sale?: Sale; error?: string };
-  processReturn: (saleId: string, productId: string, quantity: number, reason: string) => { success: boolean; error?: string };
+  processReturn: (saleId: string, productId: string, quantity: number, reason: string) => { success: boolean; error?: string; updatedSale?: Sale };
 
   // Supplier & Purchasing
   saveSupplier: (supplier: Partial<Supplier>) => void;
@@ -1841,9 +1842,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const processReturn = (saleId: string, productId: string, quantity: number, reason: string) => {
     const res = StorageService.processCustomerReturn(saleId, productId, quantity, reason, currentUser);
     if (res.success) {
+      if (isSupabaseConfigured() && res.updatedSale && res.updatedProduct && res.returnMovement) {
+        saveSaleReturnToSupabase(res.updatedSale, res.updatedProduct, res.returnMovement).catch(err => {
+          console.warn('Supabase sale return background sync warning:', err);
+        });
+      } else {
+        if (res.updatedProduct) StorageService.enqueueOfflineItem('product', 'update', res.updatedProduct);
+        if (res.updatedSale) StorageService.enqueueOfflineItem('sale', 'update', res.updatedSale);
+        if (res.returnMovement) StorageService.enqueueOfflineItem('stock_movement', 'create', res.returnMovement);
+      }
       refreshData();
     }
-    return res;
+    return {
+      success: res.success,
+      error: res.error,
+      updatedSale: res.updatedSale,
+    };
   };
 
   // Suppliers

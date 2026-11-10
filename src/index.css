@@ -189,13 +189,79 @@ html.dark textarea::placeholder {
 
 /* Print styles for invoices, receipts, and reports */
 @media print {
-  aside, header, nav, .no-print {
+  @page {
+    margin: 5mm;
+    size: auto;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Hide app navigation, sidebar, headers, and UI controls */
+  aside, header, nav, .no-print, button {
     display: none !important;
   }
+
   main {
     padding: 0 !important;
     margin: 0 !important;
+    overflow: visible !important;
   }
+
+  /* Reset modal overlays during print so they do not clip or dim the receipt */
+  .fixed.inset-0 {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Isolate printable receipt container and allow continuous dynamic height */
+  body * {
+    visibility: hidden;
+  }
+
+  #printable-receipt-root,
+  #printable-receipt-root * {
+    visibility: visible !important;
+  }
+
+  #printable-receipt-root {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    margin: 0 auto !important;
+    width: 100% !important;
+    max-width: 80mm !important; /* Standard POS thermal paper roll width */
+    padding: 6px 10px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    page-break-inside: auto !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  #printable-receipt-root img {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    max-width: 80px !important;
+    display: block !important;
+    margin: 0 auto 6px auto !important;
+  }
+
   .print-only {
     display: block !important;
   }

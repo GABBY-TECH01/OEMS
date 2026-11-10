@@ -24,6 +24,7 @@ import { useApp } from '../../context/AppContext';
 import { Product, PricingTier, PaymentMethod, Sale } from '../../types';
 import { formatNaira, formatLagosDateTime } from '../../utils/formatters';
 import { Modal } from '../common/CommonUI';
+import { PrintableReceipt } from '../common/PrintableReceipt';
 import { BRAND_LOGO_URL } from '../../constants/branding';
 
 export const POS: React.FC = () => {
@@ -782,127 +783,16 @@ export const POS: React.FC = () => {
       <Modal
         isOpen={showReceiptModal}
         onClose={() => setShowReceiptModal(false)}
-        title="Official Sales Receipt"
+        title={completedSale?.returned || completedSale?.refunded ? 'Official Refund & Return Receipt' : 'Official Sales Receipt'}
         subtitle={`Invoice #${completedSale?.invoiceNumber} · Offnot Energy`}
-        maxWidth="md"
+        maxWidth="lg"
       >
         {completedSale && (
-          <div className="space-y-4">
-            <div id="printable-receipt" className="p-4 bg-white border border-slate-200 rounded-xl space-y-4 text-xs font-sans">
-              {/* Header */}
-              <div className="text-center border-b border-slate-200 pb-3 flex flex-col items-center">
-                <img
-                  src={BRAND_LOGO_URL}
-                  alt="Offnot Energy Logo"
-                  className="w-14 h-14 object-contain mb-1.5"
-                />
-                <h2 className="text-base font-bold text-slate-900 uppercase tracking-tight">
-                  {settings.companyName}
-                </h2>
-                <p className="text-[11px] text-emerald-800 font-semibold">{settings.slogan}</p>
-                <p className="text-[11px] text-slate-600 mt-0.5">{settings.location}</p>
-                <p className="text-[11px] text-slate-600">
-                  Tel: {settings.phone} · Email: {settings.email}
-                </p>
-              </div>
-
-              {/* Invoice Meta */}
-              <div className="grid grid-cols-2 gap-2 text-[11px] py-1 border-b border-slate-100">
-                <div>
-                  <span className="text-slate-400 block">Invoice No:</span>
-                  <span className="font-mono font-bold text-slate-900">{completedSale.invoiceNumber}</span>
-                </div>
-                <div className="text-right">
-                  <span className="text-slate-400 block">Date & Time:</span>
-                  <span className="text-slate-700">{formatLagosDateTime(completedSale.createdAt)}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block">Customer:</span>
-                  <span className="font-medium text-slate-900">{completedSale.customerName}</span>
-                </div>
-                <div className="text-right">
-                  <span className="text-slate-400 block">Sales Officer:</span>
-                  <span className="text-slate-700">{completedSale.salesRepName}</span>
-                </div>
-              </div>
-
-              {/* Items Table */}
-              <table className="w-full text-left border-collapse text-[11px]">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 font-semibold">
-                    <th className="py-1">Description</th>
-                    <th className="py-1 text-center">Qty</th>
-                    <th className="py-1 text-right">Price</th>
-                    <th className="py-1 text-right">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {completedSale.items.map((item, idx) => (
-                    <tr key={idx}>
-                      <td className="py-1.5 pr-2">
-                        <div className="font-medium text-slate-900">{item.productName}</div>
-                        <div className="font-mono text-[9px] text-slate-400">{item.sku}</div>
-                      </td>
-                      <td className="py-1.5 text-center font-mono">{item.quantity}</td>
-                      <td className="py-1.5 text-right font-mono">{formatNaira(item.unitPrice, false)}</td>
-                      <td className="py-1.5 text-right font-mono font-semibold">
-                        {formatNaira(item.subtotal)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {/* Totals */}
-              <div className="border-t border-slate-200 pt-2 space-y-1 text-[11px]">
-                <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span className="font-mono">{formatNaira(completedSale.subtotal)}</span>
-                </div>
-                {completedSale.discountTotal > 0 && (
-                  <div className="flex justify-between text-amber-700">
-                    <span>Discount:</span>
-                    <span className="font-mono">-{formatNaira(completedSale.discountTotal)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-bold text-sm text-slate-900 pt-1 border-t border-slate-200">
-                  <span>Grand Total:</span>
-                  <span className="font-mono text-emerald-800">{formatNaira(completedSale.grandTotal)}</span>
-                </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Paid ({completedSale.paymentMethod.replace('_', ' ')}):</span>
-                  <span className="font-mono font-medium">{formatNaira(completedSale.paidAmount)}</span>
-                </div>
-                {completedSale.balanceDue > 0 && (
-                  <div className="flex justify-between text-rose-600 font-bold">
-                    <span>Balance Due:</span>
-                    <span className="font-mono">{formatNaira(completedSale.balanceDue)}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Receipt Footer Message */}
-              <div className="text-center text-[10px] text-slate-400 pt-2 border-t border-slate-100 leading-relaxed">
-                <p>{settings.receiptFooterMessage}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                onClick={() => setShowReceiptModal(false)}
-                className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
-              >
-                Close
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-emerald-800 hover:bg-emerald-900 rounded-lg shadow-xs"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Print Official Receipt</span>
-              </button>
-            </div>
-          </div>
+          <PrintableReceipt
+            sale={completedSale}
+            settings={settings}
+            onClose={() => setShowReceiptModal(false)}
+          />
         )}
       </Modal>
 
