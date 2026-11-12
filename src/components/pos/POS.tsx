@@ -85,7 +85,7 @@ export const POS: React.FC = () => {
   // New Customer Quick-Add Modal
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
 
-  // Negotiated Price Modal State (for custom installer discounts & loss protection)
+  // Negotiated Price Modal State (for custom installer & customer discounts & loss protection)
   const [negotiatingItem, setNegotiatingItem] = useState<{
     productId: string;
     productName: string;
@@ -93,9 +93,12 @@ export const POS: React.FC = () => {
     currentPrice: number;
     retailPrice: number;
     installerPrice: number;
+    wholesalePrice: number;
+    dealerPrice: number;
     purchaseCost: number;
     minSellingPrice: number;
     quantity: number;
+    selectedCategory: 'retail' | 'installer' | 'wholesale' | 'dealer' | 'custom';
     negotiatedPrice: number;
     lossConfirmed: boolean;
   } | null>(null);

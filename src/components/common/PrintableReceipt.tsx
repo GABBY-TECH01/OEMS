@@ -87,11 +87,55 @@ export const PrintableReceipt: React.FC<PrintableReceiptProps> = ({
             )}
             <button
               type="button"
+              onClick={() => {
+                const element = document.getElementById('printable-receipt-root');
+                if (!element) return;
+                const receiptHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Receipt-${sale.invoiceNumber}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 24px; color: #0f172a; background: #f8fafc; }
+    .receipt-card { max-width: 440px; margin: 0 auto; background: #fff; border: 1px solid #cbd5e1; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 11px; }
+    th { border-bottom: 2px solid #0f172a; text-align: left; padding: 6px 4px; }
+    td { border-bottom: 1px solid #f1f5f9; padding: 6px 4px; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+    .font-bold { font-weight: bold; }
+    .font-mono { font-family: monospace; }
+    @media print { body { background: #fff; padding: 0; } .receipt-card { border: none; box-shadow: none; max-width: 100%; padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="receipt-card">
+    ${element.innerHTML}
+  </div>
+</body>
+</html>`;
+                const blob = new Blob([receiptHtml], { type: 'text/html;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Receipt-${sale.invoiceNumber}.html`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 rounded-lg shadow-2xs transition-all"
+              title="Download offline HTML receipt file to device"
+            >
+              <span>Download Receipt</span>
+            </button>
+            <button
+              type="button"
               onClick={handlePrint}
               className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-emerald-800 hover:bg-emerald-900 rounded-lg shadow-sm transition-all"
             >
               <Printer className="w-4 h-4" />
-              <span>Print Official Receipt</span>
+              <span>Print / Save PDF</span>
             </button>
           </div>
         </div>
@@ -125,12 +169,12 @@ export const PrintableReceipt: React.FC<PrintableReceiptProps> = ({
           )}
 
           {/* Company Branding Header */}
-          <div className="text-center border-b border-dashed border-slate-300 pb-4 flex flex-col items-center">
+          <div className="text-center border-b border-dashed border-slate-300 pb-3 flex flex-col items-center">
             {logoLoaded && (
               <img
                 src={logoSrc}
                 alt="Offnot Energy Logo"
-                className="w-16 h-16 sm:w-20 sm:h-20 object-contain mb-2 print:w-20 print:h-20"
+                className="w-20 h-20 sm:w-24 sm:h-24 object-contain mb-2 print:w-24 print:h-24"
                 onError={() => {
                   if (logoSrc !== BRAND_LOGO_URL) {
                     setLogoLoaded(true);
@@ -146,6 +190,19 @@ export const PrintableReceipt: React.FC<PrintableReceiptProps> = ({
                 {settings.slogan}
               </p>
             )}
+
+            {/* PROMINENT ISSUING BRANCH BANNER FOR EASY SALES TRACKING */}
+            <div className="mt-2.5 mb-1 w-full py-1.5 px-3 bg-emerald-50 border border-emerald-300 rounded-lg text-center print:border-slate-800 print:bg-slate-50">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-800 print:text-slate-700 block">
+                Issuing Sales Hub / Store Branch
+              </span>
+              <span className="text-xs font-black text-emerald-950 print:text-black font-mono block mt-0.5">
+                {sale.branchName || 'Showroom - Tipper Garage (HQ)'}
+              </span>
+              <span className="text-[10px] text-slate-600 block mt-0.5">
+                Location: {sale.warehouseLocation || 'Tipper Garage, Ibadan'}
+              </span>
+            </div>
             <div className="text-[10px] text-slate-600 mt-1 space-y-0.5 leading-snug">
               {settings.location && (
                 <p className="flex items-center justify-center gap-1">

@@ -608,8 +608,8 @@ export async function saveSaleToSupabase(sale: Sale, payments?: PaymentRecord[])
   if (!client || !isSupabaseConfigured()) return { success: false, error: 'Supabase is not configured' };
 
   try {
-    // 1. Sanitize customer_id:
-    // If sale.customerId is 'walk_in', 'cust_walk_in', or empty, pass null so PostgreSQL foreign key doesn't fail!
+    // 1. Pre-validate customer_id so foreign keys never fail
+    let validCustomerId: string | null = null;
     const isRealCustomerId = Boolean(
       sale.customerId &&
       sale.customerId !== 'walk_in' &&
@@ -617,8 +617,23 @@ export async function saveSaleToSupabase(sale: Sale, payments?: PaymentRecord[])
       sale.customerId !== 'null' &&
       sale.customerId !== 'undefined'
     );
+    if (isRealCustomerId && sale.customerId) {
+      try {
+        const { data: custExists } = await client
+          .from('customers')
+          .select('id')
+          .eq('id', sale.customerId)
+          .maybeSingle();
+        if (custExists) {
+          validCustomerId = custExists.id;
+        }
+      } catch (e) {
+        validCustomerId = null;
+      }
+    }
 
-    // 2. Sanitize branch_id:
+    // 2. Pre-validate branch_id so foreign keys never fail
+    let validBranchId: string | null = null;
     const isRealBranchId = Boolean(
       sale.branchId &&
       sale.branchId !== 'all' &&
@@ -626,11 +641,25 @@ export async function saveSaleToSupabase(sale: Sale, payments?: PaymentRecord[])
       sale.branchId !== 'null' &&
       sale.branchId !== 'undefined'
     );
+    if (isRealBranchId && sale.branchId) {
+      try {
+        const { data: branchExists } = await client
+          .from('branches')
+          .select('id')
+          .eq('id', sale.branchId)
+          .maybeSingle();
+        if (branchExists) {
+          validBranchId = branchExists.id;
+        }
+      } catch (e) {
+        validBranchId = null;
+      }
+    }
 
     const saleRow: Record<string, any> = {
       id: sale.id,
       invoice_number: sale.invoiceNumber,
-      customer_id: isRealCustomerId ? sale.customerId : null,
+      customer_id: validCustomerId,
       customer_name: sale.customerName || 'Walk-in Retail Customer',
       customer_phone: sale.customerPhone || null,
       customer_tier: sale.customerTier || 'retail',
@@ -649,29 +678,50 @@ export async function saveSaleToSupabase(sale: Sale, payments?: PaymentRecord[])
       sales_rep_id: sale.salesRepId || null,
       sales_rep_name: sale.salesRepName || 'Sales Staff',
       warehouse_location: sale.warehouseLocation || 'Tipper Garage (HQ)',
-      branch_id: isRealBranchId ? sale.branchId : null,
+      branch_id: validBranchId,
       branch_name: sale.branchName || null,
       notes: sale.notes || null,
       is_returned: Boolean(sale.returned),
       created_at: sale.createdAt || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
-    let { error: saleErr } = await client.from('sales').upsert(saleRow);
-
-    // If a foreign key constraint fails on customer_id, retry with customer_id: null
-    if (saleErr && (saleErr.code === '23503' || saleErr.message?.includes('customer_id'))) {
-      console.warn('Foreign key retry without customer_id:', saleErr.message);
-      saleRow.customer_id = null;
-      const retry = await client.from('sales').upsert(saleRow);
-      saleErr = retry.error;
+    // 3. Check if sale exists by id OR invoice_number to avoid unique constraint violations
+    let existingRecordId: string | null = null;
+    try {
+      const { data: existing } = await client
+        .from('sales')
+        .select('id, invoice_number')
+        .or(`id.eq.${sale.id},invoice_number.eq.${sale.invoiceNumber}`)
+        .maybeSingle();
+      if (existing) {
+        existingRecordId = existing.id;
+      }
+    } catch (e) {
+      // Ignore select error and attempt insert/upsert
     }
 
-    // If a foreign key constraint fails on branch_id, retry with branch_id: null
-    if (saleErr && (saleErr.code === '23503' || saleErr.message?.includes('branch_id'))) {
-      console.warn('Foreign key retry without branch_id:', saleErr.message);
+    let saleErr: any = null;
+    if (existingRecordId) {
+      const { error } = await client.from('sales').update(saleRow).eq('id', existingRecordId);
+      saleErr = error;
+    } else {
+      const { error } = await client.from('sales').insert(saleRow);
+      saleErr = error;
+      // If invoice_number collided, fallback to update
+      if (saleErr && (saleErr.code === '23505' || saleErr.message?.includes('invoice_number'))) {
+        const { error: updErr } = await client.from('sales').update(saleRow).eq('invoice_number', sale.invoiceNumber);
+        saleErr = updErr;
+      }
+    }
+
+    // Safety fallback: If any foreign key constraint still fails, strip customer_id & branch_id and retry
+    if (saleErr && (saleErr.code === '23503' || saleErr.message?.includes('foreign key') || saleErr.message?.includes('fkey'))) {
+      console.warn('Foreign key fallback: retrying sale insert with null customer_id & branch_id:', saleErr.message);
+      saleRow.customer_id = null;
       saleRow.branch_id = null;
-      const retry = await client.from('sales').upsert(saleRow);
-      saleErr = retry.error;
+      const { error: retryErr } = await client.from('sales').upsert(saleRow);
+      saleErr = retryErr;
     }
 
     if (saleErr) throw saleErr;
