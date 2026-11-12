@@ -608,58 +608,104 @@ export async function saveSaleToSupabase(sale: Sale, payments?: PaymentRecord[])
   if (!client || !isSupabaseConfigured()) return { success: false, error: 'Supabase is not configured' };
 
   try {
-    const saleRow = {
+    // 1. Sanitize customer_id:
+    // If sale.customerId is 'walk_in', 'cust_walk_in', or empty, pass null so PostgreSQL foreign key doesn't fail!
+    const isRealCustomerId = Boolean(
+      sale.customerId &&
+      sale.customerId !== 'walk_in' &&
+      sale.customerId !== 'cust_walk_in' &&
+      sale.customerId !== 'null' &&
+      sale.customerId !== 'undefined'
+    );
+
+    // 2. Sanitize branch_id:
+    const isRealBranchId = Boolean(
+      sale.branchId &&
+      sale.branchId !== 'all' &&
+      sale.branchId !== 'br_consolidated' &&
+      sale.branchId !== 'null' &&
+      sale.branchId !== 'undefined'
+    );
+
+    const saleRow: Record<string, any> = {
       id: sale.id,
       invoice_number: sale.invoiceNumber,
-      customer_id: sale.customerId || null,
-      customer_name: sale.customerName,
+      customer_id: isRealCustomerId ? sale.customerId : null,
+      customer_name: sale.customerName || 'Walk-in Retail Customer',
       customer_phone: sale.customerPhone || null,
       customer_tier: sale.customerTier || 'retail',
-      items: sale.items,
-      subtotal: sale.subtotal,
-      discount_total: sale.discountTotal,
-      tax_amount: sale.taxAmount,
-      grand_total: sale.grandTotal,
-      paid_amount: sale.paidAmount,
-      balance_due: sale.balanceDue,
-      cost_of_goods_sold: sale.costOfGoodsSold,
-      gross_profit: sale.grossProfit,
-      payment_method: sale.paymentMethod,
-      payment_status: sale.paymentStatus,
-      payments: sale.payments,
+      items: sale.items || [],
+      subtotal: Number(sale.subtotal || 0),
+      discount_total: Number(sale.discountTotal || 0),
+      tax_amount: Number(sale.taxAmount || 0),
+      grand_total: Number(sale.grandTotal || 0),
+      paid_amount: Number(sale.paidAmount || 0),
+      balance_due: Number(sale.balanceDue || 0),
+      cost_of_goods_sold: Number(sale.costOfGoodsSold || 0),
+      gross_profit: Number(sale.grossProfit || 0),
+      payment_method: sale.paymentMethod || 'bank_transfer',
+      payment_status: sale.paymentStatus || 'paid',
+      payments: sale.payments || [],
       sales_rep_id: sale.salesRepId || null,
-      sales_rep_name: sale.salesRepName,
-      warehouse_location: sale.warehouseLocation,
-      branch_id: sale.branchId || null,
+      sales_rep_name: sale.salesRepName || 'Sales Staff',
+      warehouse_location: sale.warehouseLocation || 'Tipper Garage (HQ)',
+      branch_id: isRealBranchId ? sale.branchId : null,
       branch_name: sale.branchName || null,
       notes: sale.notes || null,
       is_returned: Boolean(sale.returned),
-      created_at: sale.createdAt,
+      created_at: sale.createdAt || new Date().toISOString(),
     };
 
-    const { error: saleErr } = await client.from('sales').upsert(saleRow);
-    if (saleErr) throw saleErr;
+    let { error: saleErr } = await client.from('sales').upsert(saleRow);
 
-    // Record individual payment rows if provided
-    if (payments && payments.length > 0) {
-      const paymentRows = payments.map(p => ({
-        id: p.id,
-        sale_id: sale.id,
-        amount: p.amount,
-        method: p.method,
-        reference: p.reference || null,
-        recorded_by: p.recordedBy,
-        paid_at: p.paidAt,
-      }));
-      await client.from('payments').insert(paymentRows);
+    // If a foreign key constraint fails on customer_id, retry with customer_id: null
+    if (saleErr && (saleErr.code === '23503' || saleErr.message?.includes('customer_id'))) {
+      console.warn('Foreign key retry without customer_id:', saleErr.message);
+      saleRow.customer_id = null;
+      const retry = await client.from('sales').upsert(saleRow);
+      saleErr = retry.error;
     }
 
-    // Decrement current stock on products in Supabase
-    for (const item of sale.items) {
-      const { data: prodData } = await client.from('products').select('current_stock').eq('id', item.productId).single();
-      if (prodData) {
-        const newStock = Math.max(0, (prodData.current_stock || 0) - item.quantity);
-        await client.from('products').update({ current_stock: newStock }).eq('id', item.productId);
+    // If a foreign key constraint fails on branch_id, retry with branch_id: null
+    if (saleErr && (saleErr.code === '23503' || saleErr.message?.includes('branch_id'))) {
+      console.warn('Foreign key retry without branch_id:', saleErr.message);
+      saleRow.branch_id = null;
+      const retry = await client.from('sales').upsert(saleRow);
+      saleErr = retry.error;
+    }
+
+    if (saleErr) throw saleErr;
+
+    // Record individual payment rows if provided (safe, non-blocking)
+    if (payments && payments.length > 0) {
+      try {
+        const paymentRows = payments.map(p => ({
+          id: p.id,
+          sale_id: sale.id,
+          amount: p.amount,
+          method: p.method,
+          reference: p.reference || null,
+          recorded_by: p.recordedBy || 'Cashier',
+          paid_at: p.paidAt || new Date().toISOString(),
+        }));
+        await client.from('payments').insert(paymentRows);
+      } catch (payErr) {
+        console.warn('Supabase payment insert warning (sale was saved):', payErr);
+      }
+    }
+
+    // Decrement current stock on products in Supabase (safe, non-blocking per item)
+    if (Array.isArray(sale.items)) {
+      for (const item of sale.items) {
+        try {
+          const { data: prodData } = await client.from('products').select('current_stock').eq('id', item.productId).single();
+          if (prodData) {
+            const newStock = Math.max(0, (prodData.current_stock || 0) - item.quantity);
+            await client.from('products').update({ current_stock: newStock, updated_at: new Date().toISOString() }).eq('id', item.productId);
+          }
+        } catch (stockErr) {
+          console.warn(`Product stock update warning for ${item.productId}:`, stockErr);
+        }
       }
     }
 

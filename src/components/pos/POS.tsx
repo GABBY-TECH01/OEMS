@@ -19,6 +19,10 @@ import {
   WifiOff,
   Database,
   CloudUpload,
+  Tag,
+  ShieldAlert,
+  TrendingUp,
+  Check,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product, PricingTier, PaymentMethod, Sale } from '../../types';
@@ -54,11 +58,13 @@ export const POS: React.FC = () => {
     quantity: number;
     unitPrice: number;
     discount: number;
+    isNegotiated?: boolean;
+    originalPrice?: number;
   }
   const [cart, setCart] = useState<CartItem[]>([]);
 
-  // Customer & Pricing Tier
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id || '');
+  // Customer & Pricing Tier - Default to empty string (Walk-in Retail Customer)
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [pricingTier, setPricingTier] = useState<PricingTier>('retail');
   const [warehouseLocation, setWarehouseLocation] = useState<string>(settings.warehouses[0]);
 
@@ -79,17 +85,43 @@ export const POS: React.FC = () => {
   // New Customer Quick-Add Modal
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
 
+  // Negotiated Price Modal State (for custom installer discounts & loss protection)
+  const [negotiatingItem, setNegotiatingItem] = useState<{
+    productId: string;
+    productName: string;
+    productSku: string;
+    currentPrice: number;
+    retailPrice: number;
+    installerPrice: number;
+    purchaseCost: number;
+    minSellingPrice: number;
+    quantity: number;
+    negotiatedPrice: number;
+    lossConfirmed: boolean;
+  } | null>(null);
+
   // Sync selected customer tier
   const handleCustomerChange = (custId: string) => {
     setSelectedCustomerId(custId);
-    const cust = customers.find(c => c.id === custId);
-    if (cust) {
-      setPricingTier(cust.pricingTier);
-      // Update cart prices to match new tier
+    if (!custId) {
+      setPricingTier('retail');
+      // Update cart prices to retail, preserving any item explicitly negotiated
       setCart(prev =>
         prev.map(item => ({
           ...item,
-          unitPrice: getProductTierPrice(item.product, cust.pricingTier),
+          unitPrice: item.isNegotiated ? item.unitPrice : getProductTierPrice(item.product, 'retail'),
+        }))
+      );
+      return;
+    }
+    const cust = customers.find(c => c.id === custId);
+    if (cust) {
+      setPricingTier(cust.pricingTier);
+      // Update cart prices to match new tier, preserving any item explicitly negotiated
+      setCart(prev =>
+        prev.map(item => ({
+          ...item,
+          unitPrice: item.isNegotiated ? item.unitPrice : getProductTierPrice(item.product, cust.pricingTier),
         }))
       );
     }
@@ -272,6 +304,8 @@ export const POS: React.FC = () => {
     if (res.success && res.sale) {
       setShowPaymentModal(false);
       setCart([]);
+      setSelectedCustomerId('');
+      setPricingTier('retail');
       setCompletedSale(res.sale);
       setShowReceiptModal(true);
     } else {
@@ -467,44 +501,51 @@ export const POS: React.FC = () => {
             </div>
           </div>
 
-          {/* Customer Selection & Quick Add */}
-          <div className="flex items-center gap-2">
-            <select
-              value={selectedCustomerId}
-              onChange={e => handleCustomerChange(e.target.value)}
-              className="flex-1 px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600"
-            >
-              <option value="">-- Walk-in Retail Customer --</option>
-              {customers.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.type.replace('_', ' ')})
-                </option>
-              ))}
-            </select>
+          {/* Customer Selection & Quick Add - Responsive Layout */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="relative flex-1 min-w-0">
+              <select
+                value={selectedCustomerId}
+                onChange={e => handleCustomerChange(e.target.value)}
+                className="w-full px-2.5 py-2 sm:py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-600 truncate"
+              >
+                <option value="">-- Walk-in Retail Customer --</option>
+                {customers.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.type.replace('_', ' ')})
+                  </option>
+                ))}
+              </select>
+            </div>
             <button
+              type="button"
               onClick={() => setShowNewCustomerModal(true)}
-              className="px-2.5 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg whitespace-nowrap transition-colors"
-              title="Add Customer"
+              className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 rounded-lg whitespace-nowrap transition-colors shadow-2xs"
+              title="Add New Customer or Installer"
             >
-              + Customer
+              <UserCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>+ Customer</span>
             </button>
           </div>
 
           {/* Pricing Tier Selector */}
-          <div className="grid grid-cols-4 gap-1 p-1 bg-slate-200/70 rounded-lg text-[11px] font-medium text-center">
+          <div className="grid grid-cols-4 gap-1 p-1 bg-slate-200/70 dark:bg-slate-800 rounded-lg text-[11px] font-medium text-center">
             {(['retail', 'wholesale', 'installer', 'dealer'] as PricingTier[]).map(tier => (
               <button
                 key={tier}
                 onClick={() => {
                   setPricingTier(tier);
                   setCart(prev =>
-                    prev.map(i => ({ ...i, unitPrice: getProductTierPrice(i.product, tier) }))
+                    prev.map(i => ({
+                      ...i,
+                      unitPrice: i.isNegotiated ? i.unitPrice : getProductTierPrice(i.product, tier),
+                    }))
                   );
                 }}
                 className={`py-1 rounded capitalize transition-colors ${
                   pricingTier === tier
-                    ? 'bg-white text-emerald-900 font-bold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-900 dark:text-emerald-300 font-bold shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 {tier}
@@ -514,20 +555,51 @@ export const POS: React.FC = () => {
         </div>
 
         {/* Cart Items List */}
-        <div className="flex-1 overflow-y-auto p-4 divide-y divide-slate-100">
+        <div className="flex-1 overflow-y-auto p-4 divide-y divide-slate-100 dark:divide-slate-800">
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 py-12">
-              <ShoppingCart className="w-10 h-10 text-slate-300 mb-2 stroke-1" />
-              <p className="text-xs font-semibold text-slate-600">Cart is empty</p>
+              <ShoppingCart className="w-10 h-10 text-slate-300 dark:text-slate-700 mb-2 stroke-1" />
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Cart is empty</p>
               <p className="text-[11px] text-slate-400 mt-0.5">Click products on the left or scan a barcode</p>
             </div>
           ) : (
             cart.map(item => (
               <div key={item.product.id} className="py-3 flex items-center justify-between gap-3 text-xs">
                 <div className="min-w-0 flex-1">
-                  <h4 className="font-semibold text-slate-900 truncate">{item.product.name}</h4>
-                  <div className="flex items-center gap-2 mt-0.5 text-slate-500 font-mono text-[11px]">
-                    <span>{formatNaira(item.unitPrice)} each</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h4 className="font-semibold text-slate-900 dark:text-slate-100 truncate">{item.product.name}</h4>
+                    {item.isNegotiated && (
+                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shrink-0">
+                        Negotiated
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-slate-500 font-mono text-[11px]">
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">{formatNaira(item.unitPrice)} each</span>
+                    <span>·</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNegotiatingItem({
+                          productId: item.product.id,
+                          productName: item.product.name,
+                          productSku: item.product.sku,
+                          currentPrice: item.unitPrice,
+                          retailPrice: item.product.retailPrice,
+                          installerPrice: item.product.installerPrice || item.product.retailPrice,
+                          purchaseCost: item.product.purchaseCost,
+                          minSellingPrice: item.product.minSellingPrice,
+                          quantity: item.quantity,
+                          negotiatedPrice: item.unitPrice,
+                          lossConfirmed: false,
+                        })
+                      }
+                      className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400 hover:text-emerald-900 font-semibold underline cursor-pointer"
+                      title="Adjust or negotiate selling price with installer"
+                    >
+                      <Tag className="w-3 h-3" />
+                      <span>{item.isNegotiated ? 'Edit Price' : 'Negotiate Price'}</span>
+                    </button>
                     <span>·</span>
                     <span className="text-slate-400">{item.product.sku}</span>
                   </div>
@@ -888,6 +960,263 @@ export const POS: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Negotiate Agreed Price Modal (Loss Protection & Installer Margin Guard) */}
+      {negotiatingItem && (
+        <Modal
+          isOpen={Boolean(negotiatingItem)}
+          onClose={() => setNegotiatingItem(null)}
+          title="Negotiate Selling Price"
+        >
+          {(() => {
+            const unitProfit = negotiatingItem.negotiatedPrice - negotiatingItem.purchaseCost;
+            const marginPct =
+              negotiatingItem.negotiatedPrice > 0
+                ? (unitProfit / negotiatingItem.negotiatedPrice) * 100
+                : 0;
+            const lineProfit = unitProfit * negotiatingItem.quantity;
+            const isLoss = negotiatingItem.negotiatedPrice < negotiatingItem.purchaseCost;
+            const isBelowFloor =
+              !isLoss && negotiatingItem.negotiatedPrice < negotiatingItem.minSellingPrice;
+            const isProfitable = !isLoss && !isBelowFloor;
+
+            return (
+              <div className="space-y-4 text-xs">
+                {/* Product Summary */}
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                    {negotiatingItem.productName}
+                  </h4>
+                  <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500 font-mono">
+                    <span>SKU: {negotiatingItem.productSku}</span>
+                    <span>·</span>
+                    <span>Quantity in Cart: {negotiatingItem.quantity}</span>
+                  </div>
+                </div>
+
+                {/* Benchmark Reference Grid */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Price Benchmarks & Cost Basis
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                    <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                      <div className="text-[10px] text-slate-500">Retail Price</div>
+                      <div className="font-bold font-mono text-slate-800 dark:text-slate-200 mt-0.5">
+                        {formatNaira(negotiatingItem.retailPrice)}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+                      <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold">Installer Tier</div>
+                      <div className="font-bold font-mono text-emerald-800 dark:text-emerald-300 mt-0.5">
+                        {formatNaira(negotiatingItem.installerPrice)}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
+                      <div className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">Min Floor Price</div>
+                      <div className="font-bold font-mono text-amber-800 dark:text-amber-300 mt-0.5">
+                        {formatNaira(negotiatingItem.minSellingPrice)}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
+                      <div className="text-[10px] text-rose-700 dark:text-rose-400 font-semibold">Purchase Cost</div>
+                      <div className="font-bold font-mono text-rose-800 dark:text-rose-300 mt-0.5">
+                        {formatNaira(negotiatingItem.purchaseCost)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Preset Buttons */}
+                <div>
+                  <div className="text-[10px] text-slate-500 mb-1 font-medium">Quick Preset Benchmarks:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNegotiatingItem(prev =>
+                          prev ? { ...prev, negotiatedPrice: prev.installerPrice } : null
+                        )
+                      }
+                      className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-md"
+                    >
+                      Installer Price ({formatNaira(negotiatingItem.installerPrice)})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNegotiatingItem(prev =>
+                          prev ? { ...prev, negotiatedPrice: prev.minSellingPrice } : null
+                        )
+                      }
+                      className="px-2.5 py-1 text-[11px] font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-md"
+                    >
+                      Min Floor ({formatNaira(negotiatingItem.minSellingPrice)})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNegotiatingItem(prev =>
+                          prev ? { ...prev, negotiatedPrice: prev.retailPrice } : null
+                        )
+                      }
+                      className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-md"
+                    >
+                      Retail Price ({formatNaira(negotiatingItem.retailPrice)})
+                    </button>
+                  </div>
+                </div>
+
+                {/* Negotiated Selling Price Input */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                    Agreed Unit Selling Price (₦)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">
+                      ₦
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={500}
+                      value={negotiatingItem.negotiatedPrice || ''}
+                      onChange={e => {
+                        const val = Number(e.target.value) || 0;
+                        setNegotiatingItem(prev => (prev ? { ...prev, negotiatedPrice: val } : null));
+                      }}
+                      className="w-full pl-8 pr-3 py-2 text-sm font-bold font-mono bg-white dark:bg-slate-900 border-2 border-emerald-600 rounded-xl focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Real-time Profit & Margin Guard */}
+                {isLoss && (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 rounded-xl space-y-2">
+                    <div className="flex items-start gap-2 text-rose-800 dark:text-rose-300">
+                      <ShieldAlert className="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
+                      <div>
+                        <div className="font-bold text-xs uppercase tracking-wide">
+                          Loss Warning: Selling Below Purchase Cost!
+                        </div>
+                        <div className="text-[11px] mt-0.5">
+                          Purchase cost is {formatNaira(negotiatingItem.purchaseCost)}. You will lose{' '}
+                          <span className="font-bold font-mono">
+                            {formatNaira(negotiatingItem.purchaseCost - negotiatingItem.negotiatedPrice)}
+                          </span>{' '}
+                          per unit ({marginPct.toFixed(1)}% margin). Total line loss:{' '}
+                          <span className="font-bold font-mono">
+                            {formatNaira(Math.abs(lineProfit))}
+                          </span>.
+                        </div>
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 pt-1 border-t border-rose-200 dark:border-rose-800 cursor-pointer text-[11px] font-semibold text-rose-900 dark:text-rose-200">
+                      <input
+                        type="checkbox"
+                        checked={negotiatingItem.lossConfirmed}
+                        onChange={e =>
+                          setNegotiatingItem(prev =>
+                            prev ? { ...prev, lossConfirmed: e.target.checked } : null
+                          )
+                        }
+                        className="rounded text-rose-600 focus:ring-rose-500"
+                      />
+                      <span>I confirm Super Admin or Manager approval for this negotiated loss.</span>
+                    </label>
+                  </div>
+                )}
+
+                {isBelowFloor && (
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 rounded-xl flex items-start gap-2 text-amber-800 dark:text-amber-300">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-xs">Below Recommended Price Floor</div>
+                      <div className="text-[11px] mt-0.5">
+                        Minimum floor price is {formatNaira(negotiatingItem.minSellingPrice)}. Net profit is still positive: +
+                        <span className="font-bold font-mono">{formatNaira(unitProfit)}</span>/unit (
+                        {marginPct.toFixed(1)}% margin). Total order line profit: +{formatNaira(lineProfit)}.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {isProfitable && (
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 rounded-xl flex items-start gap-2 text-emerald-800 dark:text-emerald-300">
+                    <TrendingUp className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-xs">Healthy Profit Margin</div>
+                      <div className="text-[11px] mt-0.5">
+                        Profit per unit: +<span className="font-bold font-mono">{formatNaira(unitProfit)}</span> (
+                        {marginPct.toFixed(1)}% gross margin). Total order line profit: +{formatNaira(lineProfit)}.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Modal Action Buttons */}
+                <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Reset to standard tier price
+                      setCart(prev =>
+                        prev.map(i => {
+                          if (i.product.id === negotiatingItem.productId) {
+                            return {
+                              ...i,
+                              unitPrice: getProductTierPrice(i.product, pricingTier),
+                              isNegotiated: false,
+                            };
+                          }
+                          return i;
+                        })
+                      );
+                      setNegotiatingItem(null);
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 rounded-lg"
+                  >
+                    Reset to Tier Price
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNegotiatingItem(null)}
+                      className="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 rounded-lg"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isLoss && !negotiatingItem.lossConfirmed}
+                      onClick={() => {
+                        setCart(prev =>
+                          prev.map(i => {
+                            if (i.product.id === negotiatingItem.productId) {
+                              return {
+                                ...i,
+                                unitPrice: negotiatingItem.negotiatedPrice,
+                                isNegotiated: true,
+                                originalPrice: i.product.retailPrice,
+                              };
+                            }
+                            return i;
+                          })
+                        );
+                        setNegotiatingItem(null);
+                      }}
+                      className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-800 hover:bg-emerald-900 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm"
+                    >
+                      Apply Negotiated Price
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </Modal>
+      )}
 
       {/* Sticky Bottom Quick Cart / Checkout Bar for Mobile Screens */}
       {cart.length > 0 && (

@@ -439,9 +439,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setProducts(cloudData.products);
           StorageService.saveProducts(cloudData.products);
         }
-        if (cloudData.sales.length > 0) {
-          setSales(cloudData.sales);
-          StorageService.saveSales(cloudData.sales);
+        // Bidirectional Sales Reconciliation
+        const localSales = StorageService.getSales();
+        const cloudSales = cloudData.sales || [];
+        const cloudSalesMap = new Map<string, Sale>();
+        cloudSales.forEach(s => {
+          cloudSalesMap.set(s.id, s);
+          if (s.invoiceNumber) cloudSalesMap.set(s.invoiceNumber, s);
+        });
+
+        const missingInCloud: Sale[] = [];
+        for (const localSale of localSales) {
+          if (!cloudSalesMap.has(localSale.id) && !cloudSalesMap.has(localSale.invoiceNumber)) {
+            missingInCloud.push(localSale);
+          }
+        }
+
+        if (missingInCloud.length > 0) {
+          console.log(`Auto-reconciliation: Found ${missingInCloud.length} local sales not in Supabase cloud. Auto-uploading now...`);
+          for (const s of missingInCloud) {
+            try {
+              await saveSaleToSupabase(s);
+              cloudSales.push(s);
+              cloudSalesMap.set(s.id, s);
+            } catch (err) {
+              console.warn(`Failed to push local sale ${s.invoiceNumber} to Supabase:`, err);
+            }
+          }
+        }
+
+        const finalSalesMap = new Map<string, Sale>();
+        [...localSales, ...cloudSales].forEach(s => finalSalesMap.set(s.id, s));
+        const mergedSales = Array.from(finalSalesMap.values()).sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
+        if (mergedSales.length > 0) {
+          setSales(mergedSales);
+          StorageService.saveSales(mergedSales);
         }
         if (cloudData.stockMovements.length > 0) {
           setStockMovements(cloudData.stockMovements);
@@ -561,6 +596,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (isSupabaseConfigured()) {
       syncWithSupabase();
     }
+  }, [syncWithSupabase]);
+
+  // Realtime multi-device sync: listen to sales & products changes broadcasted by Supabase
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    const channel = client
+      .channel('app_realtime_sales_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, payload => {
+        console.log('Realtime change in sales table detected:', payload.eventType);
+        syncWithSupabase();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, payload => {
+        console.log('Realtime change in products table detected:', payload.eventType);
+        syncWithSupabase();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => {
+        syncWithSupabase();
+      })
+      .subscribe();
+
+    // 25-second continuous heartbeat to ensure multi-device sync even when in background
+    const heartbeat = setInterval(() => {
+      if (navigator.onLine) {
+        syncWithSupabase();
+      }
+    }, 25000);
+
+    return () => {
+      client.removeChannel(channel);
+      clearInterval(heartbeat);
+    };
   }, [syncWithSupabase]);
 
   const refreshData = () => {
