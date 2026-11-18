@@ -1834,7 +1834,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Apply official 36-SKU price list & verified Dugbe HQ / Dalute branch contacts without wiping stock
+  // Apply official 66-SKU Dugbe Branch price list & verified Dugbe HQ / Dalute branch contacts without wiping stock
   const applyGoLiveCatalogAndContacts = async (): Promise<{
     success: boolean;
     productCount: number;
@@ -1921,7 +1921,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       userRole: currentUser.role,
       action: 'APPLY_GOLIVE_CATALOG_CONTACTS',
       module: 'settings',
-      details: `Applied official 36-SKU Offnot Energy price list & Dugbe HQ / Dalute contacts (${mergedCatalog.length} total SKUs, live stock preserved).`,
+      details: `Applied official 66-SKU Offnot Energy Dugbe Branch price list & Dugbe HQ / Dalute contacts (${mergedCatalog.length} total SKUs, live stock preserved).`,
     });
     setAuditLogs(StorageService.getAuditLogs());
 

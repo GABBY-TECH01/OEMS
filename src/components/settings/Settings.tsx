@@ -919,7 +919,7 @@ WHERE id = 'cfg_offnot_main';`;
                     try {
                       const res = await applyGoLiveCatalogAndContacts();
                       showTemporaryStatus(
-                        `Official 36-SKU price list & Dugbe/Dalute contacts applied (${res.productCount} SKUs)${
+                        `Official 66-SKU Dugbe Branch price list & Dugbe/Dalute contacts applied (${res.productCount} SKUs)${
                           res.syncedToCloud ? ' & synced to Supabase cloud!' : ' locally.'
                         }`
                       );
@@ -932,8 +932,8 @@ WHERE id = 'cfg_offnot_main';`;
                   <RefreshCw className={`w-3.5 h-3.5 ${isApplyingCatalog ? 'animate-spin' : ''}`} />
                   <span>
                     {isApplyingCatalog
-                      ? 'Syncing 36-SKU Price List & Contacts...'
-                      : 'Apply & Sync Official 36-SKU Price List & Contacts'}
+                      ? 'Syncing 66-SKU Dugbe Catalog & Contacts...'
+                      : 'Apply & Sync Official 66-SKU Dugbe Catalog & Contacts'}
                   </span>
                 </button>
 

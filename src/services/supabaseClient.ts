@@ -34,8 +34,8 @@ export interface MigrationFile {
 export const MIGRATION_FILES: MigrationFile[] = [
   {
     filename: '10_golive_catalog_contacts_refunds_patch.sql',
-    title: '🚀 Go-Live 36-SKU Catalog, Contacts & Cross-Device Refund Patch',
-    description: 'Updates Dugbe HQ & Dalute branch contacts, social handles, 36 confirmed SKU prices, item-level refund columns, and Supabase Realtime across all tables.',
+    title: '🚀 Go-Live 66-SKU Dugbe Catalog, Contacts & Cross-Device Refund Patch',
+    description: 'Updates Dugbe HQ & Dalute branch contacts, social handles, all 66 confirmed SKUs (assigned to Dugbe Branch), item-level refund columns, and Supabase Realtime across all tables.',
     category: 'master',
   },
   {
