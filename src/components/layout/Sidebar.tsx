@@ -309,7 +309,7 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
           </div>
 
           <div className="mt-1 text-center text-[10px] text-slate-500 font-mono">
-            HQ: Tipper Garage, Ibadan • ₦ NGN
+            HQ: Dugbe, Ibadan • ₦ NGN
           </div>
         </div>
       </aside>

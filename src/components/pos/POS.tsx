@@ -59,6 +59,7 @@ export const POS: React.FC = () => {
     unitPrice: number;
     discount: number;
     isNegotiated?: boolean;
+    negotiatedTier?: 'retail' | 'installer' | 'wholesale' | 'dealer' | 'custom';
     originalPrice?: number;
   }
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -66,7 +67,9 @@ export const POS: React.FC = () => {
   // Customer & Pricing Tier - Default to empty string (Walk-in Retail Customer)
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [pricingTier, setPricingTier] = useState<PricingTier>('retail');
-  const [warehouseLocation, setWarehouseLocation] = useState<string>(settings.warehouses[0]);
+  const [warehouseLocation, setWarehouseLocation] = useState<string>(
+    settings.warehouses[0] || 'Head Office - Dugbe Iyaganku Road, Ibadan'
+  );
 
   // Payment Modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -572,8 +575,10 @@ export const POS: React.FC = () => {
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <h4 className="font-semibold text-slate-900 dark:text-slate-100 truncate">{item.product.name}</h4>
                     {item.isNegotiated && (
-                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shrink-0">
-                        Negotiated
+                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shrink-0 capitalize">
+                        {item.negotiatedTier && item.negotiatedTier !== 'custom'
+                          ? `Negotiated (${item.negotiatedTier})`
+                          : 'Negotiated'}
                       </span>
                     )}
                   </div>
@@ -590,15 +595,18 @@ export const POS: React.FC = () => {
                           currentPrice: item.unitPrice,
                           retailPrice: item.product.retailPrice,
                           installerPrice: item.product.installerPrice || item.product.retailPrice,
+                          wholesalePrice: item.product.wholesalePrice || item.product.retailPrice,
+                          dealerPrice: item.product.dealerPrice || item.product.retailPrice,
                           purchaseCost: item.product.purchaseCost,
                           minSellingPrice: item.product.minSellingPrice,
                           quantity: item.quantity,
+                          selectedCategory: item.negotiatedTier || pricingTier,
                           negotiatedPrice: item.unitPrice,
                           lossConfirmed: false,
                         })
                       }
                       className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400 hover:text-emerald-900 font-semibold underline cursor-pointer"
-                      title="Adjust or negotiate selling price with installer"
+                      title="Adjust or negotiate selling price by customer tier"
                     >
                       <Tag className="w-3 h-3" />
                       <span>{item.isNegotiated ? 'Edit Price' : 'Negotiate Price'}</span>
@@ -695,7 +703,7 @@ export const POS: React.FC = () => {
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
         title="Complete Sale & Process Payment"
-        subtitle={`Invoice Total: ${formatNaira(grandTotal)} · Dalute Road Warehouse`}
+        subtitle={`Invoice Total: ${formatNaira(grandTotal)} · ${warehouseLocation}`}
         maxWidth="lg"
       >
         <div className="space-y-4">
@@ -997,83 +1005,81 @@ export const POS: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Benchmark Reference Grid */}
+                {/* Price Category Selection (End User / Installer / Wholesale / Dealer / Custom) */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Price Benchmarks & Cost Basis
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                    Select Negotiating Customer Price Category
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                    <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                      <div className="text-[10px] text-slate-500">Retail Price</div>
-                      <div className="font-bold font-mono text-slate-800 dark:text-slate-200 mt-0.5">
-                        {formatNaira(negotiatingItem.retailPrice)}
-                      </div>
-                    </div>
-                    <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
-                      <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold">Installer Tier</div>
-                      <div className="font-bold font-mono text-emerald-800 dark:text-emerald-300 mt-0.5">
-                        {formatNaira(negotiatingItem.installerPrice)}
-                      </div>
-                    </div>
-                    <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
-                      <div className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">Min Floor Price</div>
-                      <div className="font-bold font-mono text-amber-800 dark:text-amber-300 mt-0.5">
-                        {formatNaira(negotiatingItem.minSellingPrice)}
-                      </div>
-                    </div>
-                    <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
-                      <div className="text-[10px] text-rose-700 dark:text-rose-400 font-semibold">Purchase Cost</div>
-                      <div className="font-bold font-mono text-rose-800 dark:text-rose-300 mt-0.5">
-                        {formatNaira(negotiatingItem.purchaseCost)}
-                      </div>
-                    </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {[
+                      { id: 'retail' as const, label: 'End User (Retail)', price: negotiatingItem.retailPrice },
+                      { id: 'installer' as const, label: 'Installer Price', price: negotiatingItem.installerPrice },
+                      { id: 'wholesale' as const, label: 'Wholesale Price', price: negotiatingItem.wholesalePrice },
+                      { id: 'dealer' as const, label: 'Dealer Price', price: negotiatingItem.dealerPrice },
+                      { id: 'custom' as const, label: 'Custom Agreed', price: negotiatingItem.negotiatedPrice },
+                    ].map(cat => {
+                      const isActive = negotiatingItem.selectedCategory === cat.id;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() =>
+                            setNegotiatingItem(prev =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    selectedCategory: cat.id,
+                                    negotiatedPrice: cat.id === 'custom' ? prev.negotiatedPrice : cat.price,
+                                  }
+                                : null
+                            )
+                          }
+                          className={`p-2 rounded-lg border text-left transition-all ${
+                            isActive
+                              ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 ring-1 ring-emerald-600'
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200">
+                              {cat.label}
+                            </span>
+                            {isActive && <Check className="w-3 h-3 text-emerald-700 shrink-0" />}
+                          </div>
+                          <div className="font-bold font-mono text-xs text-slate-900 dark:text-white mt-0.5">
+                            {cat.id === 'custom' ? 'Manual Entry' : formatNaira(cat.price)}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
-                {/* Quick Preset Buttons */}
-                <div>
-                  <div className="text-[10px] text-slate-500 mb-1 font-medium">Quick Preset Benchmarks:</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setNegotiatingItem(prev =>
-                          prev ? { ...prev, negotiatedPrice: prev.installerPrice } : null
-                        )
-                      }
-                      className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-md"
-                    >
-                      Installer Price ({formatNaira(negotiatingItem.installerPrice)})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setNegotiatingItem(prev =>
-                          prev ? { ...prev, negotiatedPrice: prev.minSellingPrice } : null
-                        )
-                      }
-                      className="px-2.5 py-1 text-[11px] font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-md"
-                    >
-                      Min Floor ({formatNaira(negotiatingItem.minSellingPrice)})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setNegotiatingItem(prev =>
-                          prev ? { ...prev, negotiatedPrice: prev.retailPrice } : null
-                        )
-                      }
-                      className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-md"
-                    >
-                      Retail Price ({formatNaira(negotiatingItem.retailPrice)})
-                    </button>
+                {/* Benchmark Floor & Cost Basis */}
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
+                    <div className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">
+                      Min Floor Price
+                    </div>
+                    <div className="font-bold font-mono text-amber-800 dark:text-amber-300 mt-0.5">
+                      {formatNaira(negotiatingItem.minSellingPrice)}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
+                    <div className="text-[10px] text-rose-700 dark:text-rose-400 font-semibold">
+                      Purchase Cost
+                    </div>
+                    <div className="font-bold font-mono text-rose-800 dark:text-rose-300 mt-0.5">
+                      {formatNaira(negotiatingItem.purchaseCost)}
+                    </div>
                   </div>
                 </div>
 
                 {/* Negotiated Selling Price Input */}
                 <div>
                   <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                    Agreed Unit Selling Price (₦)
+                    Agreed Unit Selling Price (₦) ·{' '}
+                    <span className="text-emerald-700 capitalize">{negotiatingItem.selectedCategory}</span>
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">
@@ -1082,11 +1088,13 @@ export const POS: React.FC = () => {
                     <input
                       type="number"
                       min={0}
-                      step={500}
+                      step={100}
                       value={negotiatingItem.negotiatedPrice || ''}
                       onChange={e => {
                         const val = Number(e.target.value) || 0;
-                        setNegotiatingItem(prev => (prev ? { ...prev, negotiatedPrice: val } : null));
+                        setNegotiatingItem(prev =>
+                          prev ? { ...prev, negotiatedPrice: val, selectedCategory: 'custom' } : null
+                        );
                       }}
                       className="w-full pl-8 pr-3 py-2 text-sm font-bold font-mono bg-white dark:bg-slate-900 border-2 border-emerald-600 rounded-xl focus:outline-none"
                     />
@@ -1201,6 +1209,7 @@ export const POS: React.FC = () => {
                                 ...i,
                                 unitPrice: negotiatingItem.negotiatedPrice,
                                 isNegotiated: true,
+                                negotiatedTier: negotiatingItem.selectedCategory,
                                 originalPrice: i.product.retailPrice,
                               };
                             }

@@ -332,7 +332,7 @@ export const LoginView: React.FC = () => {
                   Zero Ledger Mode Active
                 </span>
                 <span className="text-emerald-400 text-xs font-medium">
-                  HQ Tipper Garage, Ibadan
+                  HQ Dugbe • Dalute Branch, Ibadan
                 </span>
               </div>
 
@@ -360,7 +360,7 @@ export const LoginView: React.FC = () => {
                 Offnot Energy Portal &bull; Clean Energy, Stronger Tomorrow
               </p>
               <p className="text-[10px] text-slate-500 mt-1">
-                Authorized Staff Access Only &bull; Tipper Garage, Dalute Road, Ibadan
+                Authorized Staff Access Only &bull; Dugbe HQ &amp; Dalute Road, Ibadan
               </p>
             </div>
           </div>

@@ -343,6 +343,8 @@ export async function testSupabaseConnection(): Promise<{
     'audit_logs',
     'app_notifications',
     'company_settings',
+    'staff_kpis',
+    'kpi_daily_logs',
   ];
 
   const tablesFound: string[] = [];
@@ -515,7 +517,7 @@ export async function syncLocalToSupabase(localData: {
 
     // 6. Settings
     if (localData.settings) {
-      const setRow = {
+      const baseSetRow = {
         id: 'cfg_offnot_main',
         company_name: localData.settings.companyName || 'Offnot Energy',
         slogan: localData.settings.slogan || 'Clean Energy, Stronger Tomorrow',
@@ -524,12 +526,28 @@ export async function syncLocalToSupabase(localData: {
         email: localData.settings.email,
         currency_symbol: localData.settings.currencySymbol || '₦',
         currency_code: localData.settings.currencyCode || 'NGN',
-        default_vat_rate: localData.settings.defaultVatRate || 7.5,
+        default_vat_rate: localData.settings.defaultVatRate ?? 7.5,
         enable_tax_by_default: Boolean(localData.settings.enableTaxByDefault),
-        min_gross_margin_percent: localData.settings.minGrossMarginPercent || 12,
+        min_gross_margin_percent: localData.settings.minGrossMarginPercent ?? 12,
         receipt_footer_message: localData.settings.receiptFooterMessage,
       };
-      await client.from('company_settings').upsert(setRow);
+      const fullSetRow = {
+        ...baseSetRow,
+        head_office_address: localData.settings.headOfficeAddress || null,
+        branch_office_address: localData.settings.branchOfficeAddress || null,
+        dugbe_phone: localData.settings.dugbePhone || null,
+        dalute_phone: localData.settings.dalutePhone || null,
+        customer_service_phone: localData.settings.customerServicePhone || localData.settings.phone || null,
+        facebook_handle: localData.settings.facebookHandle || null,
+        instagram_handle: localData.settings.instagramHandle || null,
+        tiktok_handle: localData.settings.tiktokHandle || null,
+        warehouses: Array.isArray(localData.settings.warehouses) ? localData.settings.warehouses : [],
+        role_permissions: localData.settings.rolePermissions || null,
+      };
+      const { error: setErr } = await client.from('company_settings').upsert(fullSetRow);
+      if (setErr) {
+        await client.from('company_settings').upsert(baseSetRow);
+      }
       results.company_settings = 1;
     }
 

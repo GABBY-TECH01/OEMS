@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings as SettingsIcon,
   Building2,
@@ -143,10 +143,16 @@ export const Settings: React.FC = () => {
     resetToZeroLedger,
     refreshData,
     setActiveTab,
+    applyGoLiveCatalogAndContacts,
   } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<SettingsSubTab>('matrix');
   const [formSettings, setFormSettings] = useState<CompanySettings>(settings);
+  const [isApplyingCatalog, setIsApplyingCatalog] = useState(false);
+
+  useEffect(() => {
+    setFormSettings(settings);
+  }, [settings]);
   const [newWarehouse, setNewWarehouse] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -784,7 +790,7 @@ WHERE id = 'cfg_offnot_main';`;
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Head Office Location (Ibadan) *</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Primary Location Summary *</label>
                   <input
                     type="text"
                     required
@@ -815,7 +821,122 @@ WHERE id = 'cfg_offnot_main';`;
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Head Office Address (Dugbe)</label>
+                  <input
+                    type="text"
+                    value={formSettings.headOfficeAddress || ''}
+                    onChange={e => setFormSettings({ ...formSettings, headOfficeAddress: e.target.value })}
+                    placeholder="Opposite Sweetco, Dugbe Iyaganku Road, Ibadan"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Branch Office Address (Dalute)</label>
+                  <input
+                    type="text"
+                    value={formSettings.branchOfficeAddress || ''}
+                    onChange={e => setFormSettings({ ...formSettings, branchOfficeAddress: e.target.value })}
+                    placeholder="Inside Tipper Garage, Dalute Road, Ibadan"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Office Line (Dugbe)</label>
+                  <input
+                    type="text"
+                    value={formSettings.dugbePhone || ''}
+                    onChange={e => setFormSettings({ ...formSettings, dugbePhone: e.target.value })}
+                    placeholder="07064159047"
+                    className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Office Line (Dalute)</label>
+                  <input
+                    type="text"
+                    value={formSettings.dalutePhone || ''}
+                    onChange={e => setFormSettings({ ...formSettings, dalutePhone: e.target.value })}
+                    placeholder="08087928125"
+                    className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Customer Service Line</label>
+                  <input
+                    type="text"
+                    value={formSettings.customerServicePhone || ''}
+                    onChange={e => setFormSettings({ ...formSettings, customerServicePhone: e.target.value })}
+                    placeholder="07047053453"
+                    className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Facebook (FB)</label>
+                  <input
+                    type="text"
+                    value={formSettings.facebookHandle || ''}
+                    onChange={e => setFormSettings({ ...formSettings, facebookHandle: e.target.value })}
+                    placeholder="Offnot Energy"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Instagram (IG)</label>
+                  <input
+                    type="text"
+                    value={formSettings.instagramHandle || ''}
+                    onChange={e => setFormSettings({ ...formSettings, instagramHandle: e.target.value })}
+                    placeholder="offnot.energy"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">TikTok (TK)</label>
+                  <input
+                    type="text"
+                    value={formSettings.tiktokHandle || ''}
+                    onChange={e => setFormSettings({ ...formSettings, tiktokHandle: e.target.value })}
+                    placeholder="offnot Energy"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <button
+                  type="button"
+                  disabled={isApplyingCatalog}
+                  onClick={async () => {
+                    setIsApplyingCatalog(true);
+                    try {
+                      const res = await applyGoLiveCatalogAndContacts();
+                      showTemporaryStatus(
+                        `Official 36-SKU price list & Dugbe/Dalute contacts applied (${res.productCount} SKUs)${
+                          res.syncedToCloud ? ' & synced to Supabase cloud!' : ' locally.'
+                        }`
+                      );
+                    } finally {
+                      setIsApplyingCatalog(false);
+                    }
+                  }}
+                  className="px-4 py-2 text-xs font-bold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isApplyingCatalog ? 'animate-spin' : ''}`} />
+                  <span>
+                    {isApplyingCatalog
+                      ? 'Syncing 36-SKU Price List & Contacts...'
+                      : 'Apply & Sync Official 36-SKU Price List & Contacts'}
+                  </span>
+                </button>
+
                 <button
                   type="submit"
                   className="px-4 py-2 text-xs font-bold text-white bg-emerald-800 hover:bg-emerald-900 rounded-xl transition-colors shadow-xs"

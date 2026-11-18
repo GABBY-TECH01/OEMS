@@ -60,6 +60,76 @@ export function formatLagosDate(isoString: string | undefined | null): string {
 }
 
 /**
+ * Returns YYYY-MM-DD in Africa/Lagos timezone so mobile & desktop devices
+ * in any timezone compute identical "Today" and 7-day trend buckets.
+ */
+export function getLagosDateKey(input?: string | Date | null): string {
+  try {
+    const date = input ? new Date(input) : new Date();
+    if (isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Lagos',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Returns YYYY-MM in Africa/Lagos timezone (matches KPI period strings).
+ */
+export function getLagosMonthKey(input?: string | Date | null): string {
+  const key = getLagosDateKey(input);
+  return key ? key.slice(0, 7) : '';
+}
+
+/**
+ * Checks whether an ISO timestamp falls into a given period using Africa/Lagos calendar boundaries.
+ */
+export function isDateInLagosPeriod(
+  isoString: string | undefined | null,
+  period: 'today' | 'week' | 'month' | 'quarter' | 'year' | 'all'
+): boolean {
+  if (period === 'all') return true;
+  if (!isoString) return false;
+
+  const dateKey = getLagosDateKey(isoString);
+  const todayKey = getLagosDateKey(new Date());
+  if (!dateKey || !todayKey) return false;
+
+  if (period === 'today') {
+    return dateKey === todayKey;
+  }
+
+  const [ty, tm, td] = todayKey.split('-').map(Number);
+  const [dy, dm] = dateKey.split('-').map(Number);
+
+  if (period === 'year') {
+    return dy === ty;
+  }
+  if (period === 'month') {
+    return dy === ty && dm === tm;
+  }
+  if (period === 'quarter') {
+    const currentQuarter = Math.floor((tm - 1) / 3);
+    const dateQuarter = Math.floor((dm - 1) / 3);
+    return dy === ty && dateQuarter === currentQuarter;
+  }
+  if (period === 'week') {
+    // Sunday-start week in Lagos calendar
+    const todayUtcMidnight = Date.UTC(ty, tm - 1, td);
+    const dayOfWeek = new Date(todayUtcMidnight).getUTCDay();
+    const weekStartKey = getLagosDateKey(new Date(todayUtcMidnight - dayOfWeek * 86400000));
+    return dateKey >= weekStartKey && dateKey <= todayKey;
+  }
+
+  return true;
+}
+
+/**
  * Generate sequential, unique professional business identifiers
  */
 export function generateReferenceNumber(prefix: string, sequenceNumber: number): string {

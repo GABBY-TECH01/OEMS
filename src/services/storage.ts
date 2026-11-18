@@ -179,17 +179,24 @@ export const INITIAL_ROLE_PERMISSIONS: RolePermissionsMap = {
 export const INITIAL_SETTINGS: CompanySettings = {
   companyName: 'Offnot Energy',
   slogan: 'Clean Energy, Stronger Tomorrow',
-  location: 'Inside Tipper Garage, Dalute Road, Ibadan, Oyo State, Nigeria',
+  location: 'Opposite Sweetco, Dugbe Iyaganku Road, Ibadan, Oyo State, Nigeria',
   phone: '07047053453',
   email: 'offnotenergy@gmail.com',
+  headOfficeAddress: 'Opposite Sweetco, Dugbe Iyaganku Road, Ibadan',
+  branchOfficeAddress: 'Inside Tipper Garage, Dalute Road, Ibadan',
+  dugbePhone: '07064159047',
+  dalutePhone: '08087928125',
+  customerServicePhone: '07047053453',
+  facebookHandle: 'Offnot Energy',
+  instagramHandle: 'offnot.energy',
+  tiktokHandle: 'offnot Energy',
   currencySymbol: '₦',
   currencyCode: 'NGN',
   defaultVatRate: 7.5,
   enableTaxByDefault: false,
   warehouses: [
-    'Main Store - Dalute Road',
-    'Showroom - Tipper Garage, Ibadan',
-    'Warehouse 2 - Iwo Road Depot',
+    'Head Office - Dugbe Iyaganku Road, Ibadan',
+    'Branch Store - Inside Tipper Garage, Dalute Road, Ibadan',
   ],
   minGrossMarginPercent: 12,
   receiptFooterMessage: 'Thank you for choosing Offnot Energy! Clean Energy, Stronger Tomorrow. Official stamped receipt.',
@@ -205,13 +212,13 @@ export const INITIAL_SETTINGS: CompanySettings = {
 export const INITIAL_BRANCHES: Branch[] = [
   {
     id: 'br_tipper_hq',
-    name: 'Showroom - Tipper Garage (HQ)',
+    name: 'Head Office - Dugbe (Opposite Sweetco)',
     code: 'BR-IBD-01',
     city: 'Ibadan',
     state: 'Oyo State',
-    address: 'Inside Tipper Garage, Dalute Road, Ibadan',
-    phone: '07047053453',
-    email: 'tipper@offnotenergy.ng',
+    address: 'Opposite Sweetco, Dugbe Iyaganku Road, Ibadan',
+    phone: '07064159047',
+    email: 'offnotenergy@gmail.com',
     managerName: 'Gabriel Francis',
     isHeadquarters: true,
     isActive: true,
@@ -219,31 +226,17 @@ export const INITIAL_BRANCHES: Branch[] = [
   },
   {
     id: 'br_dalute_main',
-    name: 'Main Store - Dalute Road',
+    name: 'Branch Office - Dalute Road (Tipper Garage)',
     code: 'BR-IBD-02',
     city: 'Ibadan',
     state: 'Oyo State',
-    address: 'Plot 12 Dalute Road, Beside Bovas, Ibadan',
-    phone: '08034567890',
-    email: 'dalute@offnotenergy.ng',
+    address: 'Inside Tipper Garage, Dalute Road, Ibadan',
+    phone: '08087928125',
+    email: 'offnotenergy@gmail.com',
     managerName: 'Bolanle Oladipo',
     isHeadquarters: false,
     isActive: true,
     createdAt: '2026-01-10T08:00:00Z',
-  },
-  {
-    id: 'br_iwo_depot',
-    name: 'Warehouse 2 - Iwo Road Depot',
-    code: 'BR-IBD-03',
-    city: 'Ibadan',
-    state: 'Oyo State',
-    address: 'Express Interchange, Iwo Road, Ibadan',
-    phone: '08056789012',
-    email: 'iworoad@offnotenergy.ng',
-    managerName: 'Sunday Adeyemi',
-    isHeadquarters: false,
-    isActive: true,
-    createdAt: '2026-02-01T08:00:00Z',
   },
 ];
 
@@ -256,7 +249,7 @@ export const INITIAL_USERS: User[] = [
     role: 'super_admin',
     phone: '07047053453',
     branchId: 'br_tipper_hq',
-    branchName: 'Showroom - Tipper Garage (HQ)',
+    branchName: 'Head Office - Dugbe (Opposite Sweetco)',
     temporaryPassword: 'SuperAdmin2026!',
     status: 'active',
     hasFullSystemAccess: true,
@@ -268,9 +261,9 @@ export const INITIAL_USERS: User[] = [
     username: 'admin',
     email: 'admin@offnotenergy.ng',
     role: 'admin',
-    phone: '08022233344',
+    phone: '07064159047',
     branchId: 'br_tipper_hq',
-    branchName: 'Showroom - Tipper Garage (HQ)',
+    branchName: 'Head Office - Dugbe (Opposite Sweetco)',
     temporaryPassword: 'Admin2026!',
     status: 'active',
     hasFullSystemAccess: false,
@@ -282,9 +275,9 @@ export const INITIAL_USERS: User[] = [
     username: 'ceo',
     email: 'ceo@offnotenergy.ng',
     role: 'ceo',
-    phone: '08023456789',
+    phone: '07047053453',
     branchId: 'br_tipper_hq',
-    branchName: 'Showroom - Tipper Garage (HQ)',
+    branchName: 'Head Office - Dugbe (Opposite Sweetco)',
     temporaryPassword: 'Ceo2026!',
     status: 'active',
   },
@@ -294,9 +287,9 @@ export const INITIAL_USERS: User[] = [
     username: 'manager',
     email: 'manager@offnotenergy.ng',
     role: 'manager',
-    phone: '08034567890',
+    phone: '08087928125',
     branchId: 'br_dalute_main',
-    branchName: 'Main Store - Dalute Road',
+    branchName: 'Branch Office - Dalute Road (Tipper Garage)',
     temporaryPassword: 'Manager2026!',
     status: 'active',
   },
@@ -306,9 +299,9 @@ export const INITIAL_USERS: User[] = [
     username: 'inventory',
     email: 'inventory@offnotenergy.ng',
     role: 'inventory_officer',
-    phone: '08056789012',
+    phone: '08087928125',
     branchId: 'br_dalute_main',
-    branchName: 'Main Store - Dalute Road',
+    branchName: 'Branch Office - Dalute Road (Tipper Garage)',
     temporaryPassword: 'Inventory2026!',
     status: 'active',
   },
@@ -318,9 +311,9 @@ export const INITIAL_USERS: User[] = [
     username: 'sales',
     email: 'sales@offnotenergy.ng',
     role: 'sales_rep',
-    phone: '08078901234',
+    phone: '07064159047',
     branchId: 'br_tipper_hq',
-    branchName: 'Showroom - Tipper Garage (HQ)',
+    branchName: 'Head Office - Dugbe (Opposite Sweetco)',
     temporaryPassword: 'Sales2026!',
     status: 'active',
   },
@@ -330,9 +323,9 @@ export const INITIAL_USERS: User[] = [
     username: 'accountant',
     email: 'accounts@offnotenergy.ng',
     role: 'accountant',
-    phone: '08090123456',
+    phone: '07047053453',
     branchId: 'br_tipper_hq',
-    branchName: 'Showroom - Tipper Garage (HQ)',
+    branchName: 'Head Office - Dugbe (Opposite Sweetco)',
     temporaryPassword: 'Accounts2026!',
     status: 'active',
   },
@@ -342,9 +335,9 @@ export const INITIAL_USERS: User[] = [
     username: 'engineer',
     email: 'tech@offnotenergy.ng',
     role: 'technical_staff',
-    phone: '08123456780',
+    phone: '08087928125',
     branchId: 'br_dalute_main',
-    branchName: 'Main Store - Dalute Road',
+    branchName: 'Branch Office - Dalute Road (Tipper Garage)',
     temporaryPassword: 'Engineer2026!',
     status: 'active',
   },
@@ -356,9 +349,9 @@ export const INITIAL_STAFF_ACCOUNTS: StaffAccount[] = INITIAL_USERS.map(u => ({
   username: u.username || u.email.split('@')[0],
   email: u.email,
   role: u.role,
-  phone: u.phone || '07000000000',
+  phone: u.phone || '07047053453',
   branchId: u.branchId || 'br_tipper_hq',
-  branchName: u.branchName || 'Showroom - Tipper Garage (HQ)',
+  branchName: u.branchName || 'Head Office - Dugbe (Opposite Sweetco)',
   temporaryPassword: u.temporaryPassword,
   status: u.status,
   hasFullSystemAccess: u.hasFullSystemAccess,
@@ -368,36 +361,45 @@ export const INITIAL_STAFF_ACCOUNTS: StaffAccount[] = INITIAL_USERS.map(u => ({
 }));
 
 export const INITIAL_CATEGORIES = [
-  'Hybrid inverters',
-  'Solar panels',
-  'Lithium batteries',
-  'Tubular batteries',
-  'Dry-cell batteries',
-  'Portable power stations',
-  'Itel PowerTank',
-  'Itel PowerGo',
-  'Itel PowerGo Pro',
-  'Itel AIO and all-in-one systems',
-  'Solar cables',
-  'Surge protectors and breakers',
-  'Mounting accessories',
-  'Installation materials',
-  'Other solar accessories',
+  'Itel All In One',
+  'Itel Inverter',
+  'Itel Battery',
+  'Tubular Batteries',
+  'Invertek Hybrid',
+  'Solar Panels',
+  'Cables',
+  'Breaker Box',
+  'Protecting Devices',
+  'Installation Accessories',
+  'Other Solar Accessories',
 ];
 
 export const INITIAL_SUPPLIERS: Supplier[] = [
   {
+    id: 'sup_itel',
+    companyName: 'Itel Energy Nigeria Official',
+    contactPerson: 'Kazeem Mustapha',
+    phone: '08182233445',
+    email: 'b2b@itel-energy.ng',
+    address: 'Computer Village, Ikeja & Ibadan Regional Hub',
+    categories: ['Itel All In One', 'Itel Inverter', 'Itel Battery', 'Solar Panels'],
+    paymentTerms: '30 Days Net',
+    outstandingBalance: 0,
+    createdAt: '2026-02-01T10:00:00Z',
+    notes: 'Primary supplier for Itel All-in-One PowerGo/PowerTank, Itel Hybrid Inverters, Lithium Batteries & 620W Panels.',
+  },
+  {
     id: 'sup_felicity',
-    companyName: 'Felicity Solar Direct Nigeria',
-    contactPerson: 'Mr. Zhang Wei / Biodun',
+    companyName: 'Invertek & Powerzen West Africa',
+    contactPerson: 'Mr. Biodun Adewale',
     phone: '08031122334',
-    email: 'sales@felicitysolar-ng.com',
+    email: 'orders@invertek-solar.ng',
     address: 'Plot 14 Commercial Avenue, Ikeja, Lagos',
-    categories: ['Hybrid inverters', 'Lithium batteries'],
+    categories: ['Invertek Hybrid', 'Tubular Batteries'],
     paymentTerms: '14 Days Net',
     outstandingBalance: 0,
     createdAt: '2026-01-10T08:00:00Z',
-    notes: 'Primary supplier for Felicity 5kW/10kW hybrid inverters & wall-mount lithium banks.',
+    notes: 'Supplier for Invertek Hybrid inverters and Powerzen tubular batteries.',
   },
   {
     id: 'sup_jinko',
@@ -406,23 +408,11 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
     phone: '08029988776',
     email: 'orders@jinkowestafrica.com',
     address: 'Apapa Port Industrial Area, Lagos',
-    categories: ['Solar panels'],
+    categories: ['Solar Panels'],
     paymentTerms: 'Immediate',
     outstandingBalance: 0,
     createdAt: '2026-01-15T09:30:00Z',
-    notes: 'Grade A Tier 1 Bifacial & N-type panels.',
-  },
-  {
-    id: 'sup_itel',
-    companyName: 'Itel Energy Nigeria Official',
-    contactPerson: 'Kazeem Mustapha',
-    phone: '08182233445',
-    email: 'b2b@itel-energy.ng',
-    address: 'Computer Village, Ikeja & Ibadan Regional Hub',
-    categories: ['Itel PowerTank', 'Itel PowerGo', 'Itel PowerGo Pro', 'Itel AIO and all-in-one systems'],
-    paymentTerms: '30 Days Net',
-    outstandingBalance: 0,
-    createdAt: '2026-02-01T10:00:00Z',
+    notes: 'Grade A Tier 1 Jinko Solar Panels.',
   },
   {
     id: 'sup_cables',
@@ -431,332 +421,576 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
     phone: '08055566778',
     email: 'sales@ibadancablehub.ng',
     address: 'Dugbe Commercial Center, Ibadan, Oyo State',
-    categories: ['Solar cables', 'Surge protectors and breakers', 'Installation materials'],
+    categories: ['Cables', 'Breaker Box', 'Protecting Devices', 'Installation Accessories'],
     paymentTerms: 'Immediate',
     outstandingBalance: 0,
     createdAt: '2026-02-10T11:00:00Z',
   },
 ];
 
+function roundNairaStep(val: number, basePrice: number): number {
+  if (basePrice < 10000) return Math.round(val / 50) * 50;
+  return Math.round(val / 500) * 500;
+}
+
+function buildCatalogProduct(params: {
+  id: string;
+  sku: string;
+  name: string;
+  brand: string;
+  category: string;
+  model: string;
+  description: string;
+  unit?: string;
+  price: number;
+  reorderLevel?: number;
+  supplierId?: string;
+  supplierName?: string;
+  barcode: string;
+  branchId?: string;
+  specs?: Product['specs'];
+}): Product {
+  const p = params.price;
+  const isHQ = (params.branchId || 'br_tipper_hq') === 'br_tipper_hq';
+  return {
+    id: params.id,
+    sku: params.sku,
+    name: params.name,
+    brand: params.brand,
+    category: params.category,
+    model: params.model,
+    description: params.description,
+    unit: params.unit || 'Unit',
+    purchaseCost: roundNairaStep(p * 0.88, p),
+    retailPrice: roundNairaStep(p * 1.08, p),
+    wholesalePrice: roundNairaStep(p * 1.03, p),
+    installerPrice: p,
+    dealerPrice: roundNairaStep(p * 0.97, p),
+    minSellingPrice: roundNairaStep(p * 0.95, p),
+    currentStock: 0,
+    reorderLevel: params.reorderLevel ?? 5,
+    warehouseLocation: isHQ
+      ? 'Head Office - Dugbe Iyaganku Road, Ibadan'
+      : 'Branch Store - Inside Tipper Garage, Dalute Road, Ibadan',
+    branchId: isHQ ? 'br_tipper_hq' : 'br_dalute_main',
+    branchName: isHQ
+      ? 'Head Office - Dugbe (Opposite Sweetco)'
+      : 'Branch Office - Dalute Road (Tipper Garage)',
+    supplierId: params.supplierId || 'sup_itel',
+    supplierName: params.supplierName || 'Itel Energy Nigeria Official',
+    barcode: params.barcode,
+    specs: params.specs,
+    status: 'active',
+    createdAt: '2026-03-01T08:00:00Z',
+    updatedAt: '2026-03-01T08:00:00Z',
+  };
+}
+
 /**
- * Initial Solar Product Catalog
- * Preserves full catalog definitions, models, SKUs, and pricing tiers
- * with STRICT ZERO CURRENT STOCK (0 units) as requested by user.
+ * Official Offnot Energy Price List Product Catalog (36 Confirmed SKUs)
+ * Base prices from price list are assigned as Installer Price, with proportional
+ * Retail / Wholesale / Dealer / Min Floor / Purchase Cost tiers and 0 opening stock.
  */
 export const INITIAL_PRODUCTS: Product[] = [
-  {
-    id: 'prod_fel_5kw',
-    sku: 'INV-FEL-5KW-48V',
-    name: 'Felicity Solar 5kVA / 5kW 48V Pure Sine Wave Hybrid Inverter',
-    brand: 'Felicity Solar',
-    category: 'Hybrid inverters',
-    model: 'IVEM5048',
-    description: 'High-voltage MPPT 120A, parallel capable up to 6 units, dual AC outputs, Wi-Fi monitoring.',
-    unit: 'Unit',
-    purchaseCost: 620000,
-    retailPrice: 750000,
-    wholesalePrice: 700000,
-    installerPrice: 685000,
-    dealerPrice: 670000,
-    minSellingPrice: 650000,
-    currentStock: 0,
-    reorderLevel: 4,
-    warehouseLocation: 'Main Store - Dalute Road',
+  // 1. Itel All In One
+  buildCatalogProduct({
+    id: 'prod_itel_power_go',
+    sku: 'AIO-ITEL-PG',
+    name: 'Itel POWER GO All-in-One Solar System',
+    brand: 'Itel',
+    category: 'Itel All In One',
+    model: 'POWER GO',
+    description: 'Compact Itel All-in-One portable solar lighting & charging system.',
+    price: 75600,
+    barcode: '489448900101',
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_power_go_pro',
+    sku: 'AIO-ITEL-PG-PRO',
+    name: 'Itel POWER GO PRO All-in-One Solar System',
+    brand: 'Itel',
+    category: 'Itel All In One',
+    model: 'POWER GO PRO',
+    description: 'Upgraded Itel Power Go Pro all-in-one solar kit for home & shop backup.',
+    price: 132000,
+    barcode: '489448900102',
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_powertank_500',
+    sku: 'AIO-ITEL-PT500',
+    name: 'ITEL 500W POWERTANK Portable Power Station',
+    brand: 'Itel',
+    category: 'Itel All In One',
+    model: '500W POWERTANK',
+    description: 'Itel 500W PowerTank pure sine wave portable LiFePO4 power station.',
+    price: 280000,
+    barcode: '489448900103',
+    specs: { powerRatingKw: 0.5, chemistry: 'LiFePO4', warrantyMonths: 24 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_powertank_1000',
+    sku: 'AIO-ITEL-PT1000',
+    name: 'ITEL 1000W Power tank Portable Power Station',
+    brand: 'Itel',
+    category: 'Itel All In One',
+    model: '1000W POWERTANK',
+    description: 'Itel 1000W PowerTank high-capacity portable solar power station.',
+    price: 600000,
+    barcode: '489448900104',
+    specs: { powerRatingKw: 1.0, chemistry: 'LiFePO4', warrantyMonths: 24 },
+  }),
+
+  // 2. ITEL INVERTER
+  buildCatalogProduct({
+    id: 'prod_itel_inv_1_5kva',
+    sku: 'INV-ITEL-1.5KVA-12V',
+    name: 'Itel 1.5KVA / 12V Hybrid Inverter',
+    brand: 'Itel',
+    category: 'Itel Inverter',
+    model: '1.5KVA/12V',
+    description: 'Itel 1.5kVA 12V solar hybrid inverter with built-in MPPT charge controller.',
+    price: 218000,
+    barcode: '489448900201',
+    specs: { powerRatingKw: 1.5, voltage: '12V', warrantyMonths: 24 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_inv_3kva',
+    sku: 'INV-ITEL-3KVA-24V',
+    name: 'Itel 3KVA / 24V Hybrid Inverter',
+    brand: 'Itel',
+    category: 'Itel Inverter',
+    model: '3KVA/24V',
+    description: 'Itel 3kVA 24V pure sine wave hybrid solar inverter.',
+    price: 299000,
+    barcode: '489448900202',
+    specs: { powerRatingKw: 3.0, voltage: '24V', warrantyMonths: 24 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_inv_4kva',
+    sku: 'INV-ITEL-4KVA-24V',
+    name: 'Itel 4KVA / 24V Hybrid Inverter',
+    brand: 'Itel',
+    category: 'Itel Inverter',
+    model: '4KVA/24V',
+    description: 'Itel 4kVA 24V solar hybrid inverter with smart BMS support.',
+    price: 379000,
+    barcode: '489448900203',
+    specs: { powerRatingKw: 4.0, voltage: '24V', warrantyMonths: 24 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_inv_6kva',
+    sku: 'INV-ITEL-6KVA-48V',
+    name: 'Itel 6KVA / 48V Hybrid Inverter',
+    brand: 'Itel',
+    category: 'Itel Inverter',
+    model: '6KVA/48V',
+    description: 'Itel 6kVA 48V heavy-duty hybrid inverter for residential & SME loads.',
+    price: 510000,
+    barcode: '489448900204',
+    specs: { powerRatingKw: 6.0, voltage: '48V', warrantyMonths: 24 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_inv_8kva',
+    sku: 'INV-ITEL-8KVA-48V',
+    name: 'Itel 8KVA / 48V Hybrid Inverter',
+    brand: 'Itel',
+    category: 'Itel Inverter',
+    model: '8KVA/48V',
+    description: 'Itel 8kVA 48V dual-MPPT hybrid inverter with Wi-Fi monitoring.',
+    price: 713000,
+    barcode: '489448900205',
+    specs: { powerRatingKw: 8.0, voltage: '48V', warrantyMonths: 24 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_inv_11kva',
+    sku: 'INV-ITEL-11KVA-48V',
+    name: 'Itel 11KVA / 48V Hybrid Inverter',
+    brand: 'Itel',
+    category: 'Itel Inverter',
+    model: '11KVA/48V',
+    description: 'Itel 11kVA 48V commercial-grade hybrid inverter.',
+    price: 917000,
+    barcode: '489448900206',
+    specs: { powerRatingKw: 11.0, voltage: '48V', warrantyMonths: 24 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_inv_12kva',
+    sku: 'INV-ITEL-12KVA-48V',
+    name: 'Itel 12KVA / 48V Hybrid Inverter',
+    brand: 'Itel',
+    category: 'Itel Inverter',
+    model: '12KVA/48V',
+    description: 'Itel 12kVA 48V flagship commercial hybrid solar inverter.',
+    price: 990000,
+    barcode: '489448900207',
+    specs: { powerRatingKw: 12.0, voltage: '48V', warrantyMonths: 24 },
+  }),
+
+  // 3. ITEL BATTERY
+  buildCatalogProduct({
+    id: 'prod_itel_bat_1_28',
+    sku: 'BAT-ITEL-1.28-100AH',
+    name: 'Itel 1.28V+100AH Lithium Solar Battery',
+    brand: 'Itel',
+    category: 'Itel Battery',
+    model: '1.28KWH-100AH',
+    description: 'Itel 12.8V 100Ah (1.28kWh) LiFePO4 deep-cycle solar battery.',
+    price: 210000,
+    barcode: '489448900301',
+    specs: { batteryCapacityKwh: 1.28, voltage: '12.8V', chemistry: 'LiFePO4', warrantyMonths: 36 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_bat_2_56',
+    sku: 'BAT-ITEL-2.56KW',
+    name: 'Itel 2.56KW Lithium Solar Battery',
+    brand: 'Itel',
+    category: 'Itel Battery',
+    model: '2.56KW-24V',
+    description: 'Itel 2.56kWh 24V LiFePO4 solar storage battery with smart BMS.',
+    price: 547000,
+    barcode: '489448900302',
+    specs: { batteryCapacityKwh: 2.56, voltage: '25.6V', chemistry: 'LiFePO4', warrantyMonths: 60 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_bat_5kwh_48v',
+    sku: 'BAT-ITEL-5KWH-48V',
+    name: 'Itel 5KWH 48V Lithium Solar Battery',
+    brand: 'Itel',
+    category: 'Itel Battery',
+    model: '5KWH-48V',
+    description: 'Itel 5kWh 48V wall/rack-mount LiFePO4 battery bank.',
+    price: 910000,
+    barcode: '489448900303',
+    specs: { batteryCapacityKwh: 5.0, voltage: '48V', chemistry: 'LiFePO4', warrantyMonths: 60 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_bat_5kwh_24v',
+    sku: 'BAT-ITEL-5KWH-24V',
+    name: 'Itel 5KWH 24V Lithium Solar Battery',
+    brand: 'Itel',
+    category: 'Itel Battery',
+    model: '5KWH-24V',
+    description: 'Itel 5kWh 24V high-capacity LiFePO4 battery bank.',
+    price: 947000,
+    barcode: '489448900304',
+    specs: { batteryCapacityKwh: 5.0, voltage: '24V', chemistry: 'LiFePO4', warrantyMonths: 60 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_bat_16kwh_4h',
+    sku: 'BAT-ITEL-16KWH-4H',
+    name: 'Itel 16KWH 4H Lithium Battery Bank',
+    brand: 'Itel',
+    category: 'Itel Battery',
+    model: '16KWH-4H',
+    description: 'Itel 16kWh 4H floor-standing LiFePO4 energy storage cabinet.',
+    price: 2310000,
+    barcode: '489448900305',
+    specs: { batteryCapacityKwh: 16.0, voltage: '48V', chemistry: 'LiFePO4', warrantyMonths: 60 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_itel_bat_16kwhy',
+    sku: 'BAT-ITEL-16KWHY',
+    name: 'Itel 16KWHY Lithium Battery Bank',
+    brand: 'Itel',
+    category: 'Itel Battery',
+    model: '16KWHY',
+    description: 'Itel 16kWh Y-series LiFePO4 high-cycle commercial battery bank.',
+    price: 2280000,
+    barcode: '489448900306',
+    specs: { batteryCapacityKwh: 16.0, voltage: '48V', chemistry: 'LiFePO4', warrantyMonths: 60 },
+  }),
+
+  // 4. TUBULAR BATTERIES
+  buildCatalogProduct({
+    id: 'prod_powerzen_tubular',
+    sku: 'BAT-PWRZ-TUB-12V',
+    name: 'Powerzen Tubular Battery',
+    brand: 'Powerzen',
+    category: 'Tubular Batteries',
+    model: 'Powerzen-TUB',
+    description: 'Heavy-duty Powerzen tall tubular deep-cycle solar battery.',
+    price: 210000,
+    supplierId: 'sup_felicity',
+    supplierName: 'Invertek & Powerzen West Africa',
+    barcode: '489448900401',
     branchId: 'br_dalute_main',
-    branchName: 'Main Store - Dalute Road',
+    specs: { voltage: '12V', chemistry: 'Tubular', warrantyMonths: 18 },
+  }),
+
+  // 5. INVERTEK HYBRID
+  buildCatalogProduct({
+    id: 'prod_invertek_1_1kva',
+    sku: 'INV-INVTK-1.1KVA-12V',
+    name: 'Invertek Wall Mount 1.1KVA / 12V Hybrid Inverter',
+    brand: 'Invertek',
+    category: 'Invertek Hybrid',
+    model: 'Wall Mount 1.1kVA/12V',
+    description: 'Compact Invertek wall-mount 1.1kVA 12V hybrid solar inverter.',
+    price: 92000,
     supplierId: 'sup_felicity',
-    supplierName: 'Felicity Solar Direct Nigeria',
-    barcode: '694857201948',
-    trackSerialNumbers: true,
-    specs: {
-      powerRatingKw: 5.0,
-      voltage: '48V',
-      warrantyMonths: 24,
-    },
-    status: 'active',
-    createdAt: '2026-01-20T09:00:00Z',
-    updatedAt: '2026-10-20T09:00:00Z',
-  },
-  {
-    id: 'prod_deye_8kw',
-    sku: 'INV-DEY-8KW-48V',
-    name: 'Deye 8kW SunSync Low-Voltage Hybrid Inverter',
-    brand: 'Deye',
-    category: 'Hybrid inverters',
-    model: 'SUN-8K-SG01LP1-EU',
-    description: 'European standard hybrid inverter, dual MPPT, 48V battery input, smart load output.',
-    unit: 'Unit',
-    purchaseCost: 1550000,
-    retailPrice: 1850000,
-    wholesalePrice: 1750000,
-    installerPrice: 1710000,
-    dealerPrice: 1680000,
-    minSellingPrice: 1620000,
-    currentStock: 0,
-    reorderLevel: 2,
-    warehouseLocation: 'Showroom - Tipper Garage, Ibadan',
-    branchId: 'br_tipper_hq',
-    branchName: 'Showroom - Tipper Garage (HQ)',
+    supplierName: 'Invertek & Powerzen West Africa',
+    barcode: '489448900501',
+    specs: { powerRatingKw: 1.1, voltage: '12V', warrantyMonths: 18 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_invertek_1_5kva',
+    sku: 'INV-INVTK-1.5KVA-12V',
+    name: 'Invertek Wall Mount 1.5KVA / 12V Hybrid Inverter',
+    brand: 'Invertek',
+    category: 'Invertek Hybrid',
+    model: 'Wall Mount 1.5kVA/12V',
+    description: 'Invertek wall-mount 1.5kVA 12V solar hybrid inverter.',
+    price: 116000,
     supplierId: 'sup_felicity',
-    supplierName: 'Felicity Solar Direct Nigeria',
-    barcode: '697483920194',
-    trackSerialNumbers: true,
-    specs: {
-      powerRatingKw: 8.0,
-      voltage: '48V',
-      warrantyMonths: 60,
-    },
-    status: 'active',
-    createdAt: '2026-02-05T10:00:00Z',
-    updatedAt: '2026-10-21T10:00:00Z',
-  },
-  {
-    id: 'prod_lith_5kwh',
-    sku: 'BAT-LITH-5.12KWH',
-    name: 'Offnot PowerMaster 5.12kWh 51.2V 100Ah LiFePO4 Wall-Mount Battery',
-    brand: 'Offnot Energy',
-    category: 'Lithium batteries',
-    model: 'OPM-51100-W',
-    description: 'Grade A EVE cells, 6000 cycles at 80% DoD, smart CAN/RS485 BMS communication with Deye & Felicity.',
-    unit: 'Unit',
-    purchaseCost: 980000,
-    retailPrice: 1200000,
-    wholesalePrice: 1120000,
-    installerPrice: 1090000,
-    dealerPrice: 1060000,
-    minSellingPrice: 1020000,
-    currentStock: 0,
-    reorderLevel: 5,
-    warehouseLocation: 'Main Store - Dalute Road',
-    branchId: 'br_dalute_main',
-    branchName: 'Main Store - Dalute Road',
+    supplierName: 'Invertek & Powerzen West Africa',
+    barcode: '489448900502',
+    specs: { powerRatingKw: 1.5, voltage: '12V', warrantyMonths: 18 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_invertek_2kva',
+    sku: 'INV-INVTK-2KVA-12V',
+    name: 'Invertek Hybrid 2KVA / 12V Inverter',
+    brand: 'Invertek',
+    category: 'Invertek Hybrid',
+    model: 'Hybrid 2kVA/12V',
+    description: 'Invertek 2kVA 12V hybrid solar inverter.',
+    price: 218000,
     supplierId: 'sup_felicity',
-    supplierName: 'Felicity Solar Direct Nigeria',
-    barcode: '793847291038',
-    trackSerialNumbers: true,
-    specs: {
-      batteryCapacityKwh: 5.12,
-      voltage: '51.2V',
-      chemistry: 'LiFePO4',
-      warrantyMonths: 60,
-    },
-    status: 'active',
-    createdAt: '2026-02-12T11:00:00Z',
-    updatedAt: '2026-10-22T11:00:00Z',
-  },
-  {
-    id: 'prod_jinko_550w',
-    sku: 'PNL-JNK-550W-BF',
-    name: 'Jinko 550W N-Type Tiger Neo Bifacial Solar Panel',
-    brand: 'Jinko Solar',
-    category: 'Solar panels',
-    model: 'JKM550N-72HL4-BDVP',
-    description: 'High efficiency 22.3%, double glass bifacial generation, superior low-light performance.',
-    unit: 'Unit',
-    purchaseCost: 78000,
-    retailPrice: 95000,
-    wholesalePrice: 88000,
-    installerPrice: 86000,
-    dealerPrice: 84000,
-    minSellingPrice: 82000,
-    currentStock: 0,
-    reorderLevel: 25,
-    warehouseLocation: 'Warehouse 2 - Iwo Road Depot',
-    branchId: 'br_iwo_depot',
-    branchName: 'Warehouse 2 - Iwo Road Depot',
+    supplierName: 'Invertek & Powerzen West Africa',
+    barcode: '489448900503',
+    specs: { powerRatingKw: 2.0, voltage: '12V', warrantyMonths: 24 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_invertek_3kva',
+    sku: 'INV-INVTK-3KVA-24V',
+    name: 'Invertek Hybrid 3KVA / 24V Inverter',
+    brand: 'Invertek',
+    category: 'Invertek Hybrid',
+    model: 'Hybrid 3kVA/24V',
+    description: 'Invertek 3kVA 24V MPPT hybrid solar inverter.',
+    price: 289000,
+    supplierId: 'sup_felicity',
+    supplierName: 'Invertek & Powerzen West Africa',
+    barcode: '489448900504',
+    specs: { powerRatingKw: 3.0, voltage: '24V', warrantyMonths: 24 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_invertek_4_2kva',
+    sku: 'INV-INVTK-4.2KVA-24V',
+    name: 'Invertek Hybrid 4.2KVA / 24V Inverter',
+    brand: 'Invertek',
+    category: 'Invertek Hybrid',
+    model: 'Hybrid 4.2kVA/24V',
+    description: 'Invertek 4.2kVA 24V high-output hybrid solar inverter.',
+    price: 364000,
+    supplierId: 'sup_felicity',
+    supplierName: 'Invertek & Powerzen West Africa',
+    barcode: '489448900505',
+    specs: { powerRatingKw: 4.2, voltage: '24V', warrantyMonths: 24 },
+  }),
+
+  // 6. SOLAR PANELS
+  buildCatalogProduct({
+    id: 'prod_panel_410w',
+    sku: 'PNL-SOLAR-410W',
+    name: '410W Monocrystalline Solar Panel',
+    brand: 'Offnot Solar',
+    category: 'Solar Panels',
+    model: '410W Mono',
+    description: 'High-efficiency 410W monocrystalline solar PV module.',
+    price: 95000,
+    reorderLevel: 15,
     supplierId: 'sup_jinko',
     supplierName: 'Jinko Solar West Africa Distributors',
-    barcode: '693748291048',
-    specs: {
-      panelWattageW: 550,
-      voltage: '42V',
-      warrantyMonths: 144,
-    },
-    status: 'active',
-    createdAt: '2026-01-25T14:00:00Z',
-    updatedAt: '2026-10-24T14:00:00Z',
-  },
-  {
-    id: 'prod_itel_powertank',
-    sku: 'PPS-ITEL-PT1000',
-    name: 'Itel PowerTank 1000Wh Portable Power Station',
-    brand: 'Itel',
-    category: 'Itel PowerTank',
-    model: 'IP-1000W',
-    description: '1000W continuous pure sine wave output, 1000Wh LiFePO4 battery, super-fast 1.5hr AC charging.',
-    unit: 'Unit',
-    purchaseCost: 410000,
-    retailPrice: 510000,
-    wholesalePrice: 475000,
-    installerPrice: 460000,
-    dealerPrice: 450000,
-    minSellingPrice: 435000,
-    currentStock: 0,
-    reorderLevel: 3,
-    warehouseLocation: 'Showroom - Tipper Garage, Ibadan',
-    branchId: 'br_tipper_hq',
-    branchName: 'Showroom - Tipper Garage (HQ)',
-    supplierId: 'sup_itel',
-    supplierName: 'Itel Energy Nigeria Official',
-    barcode: '489448930192',
-    specs: {
-      powerRatingKw: 1.0,
-      batteryCapacityKwh: 1.0,
-      voltage: '220V AC',
-      chemistry: 'LiFePO4',
-      warrantyMonths: 24,
-    },
-    status: 'active',
-    createdAt: '2026-03-01T10:00:00Z',
-    updatedAt: '2026-10-25T10:00:00Z',
-  },
-  {
-    id: 'prod_itel_powergo',
-    sku: 'PPS-ITEL-PG500',
-    name: 'Itel PowerGo 500Wh Mobile Power Bank Station',
-    brand: 'Itel',
-    category: 'Itel PowerGo',
-    model: 'IP-500W',
-    description: 'Compact 500W AC output, fast USB-C PD 100W, LED flood light for camping & home backup.',
-    unit: 'Unit',
-    purchaseCost: 220000,
-    retailPrice: 285000,
-    wholesalePrice: 260000,
-    installerPrice: 250000,
-    dealerPrice: 242000,
-    minSellingPrice: 235000,
-    currentStock: 0,
-    reorderLevel: 6,
-    warehouseLocation: 'Showroom - Tipper Garage, Ibadan',
-    branchId: 'br_tipper_hq',
-    branchName: 'Showroom - Tipper Garage (HQ)',
-    supplierId: 'sup_itel',
-    supplierName: 'Itel Energy Nigeria Official',
-    barcode: '489448930193',
-    specs: {
-      powerRatingKw: 0.5,
-      batteryCapacityKwh: 0.5,
-      voltage: '220V AC',
-      chemistry: 'LiFePO4',
-      warrantyMonths: 24,
-    },
-    status: 'active',
-    createdAt: '2026-03-05T12:00:00Z',
-    updatedAt: '2026-10-25T12:00:00Z',
-  },
-  {
-    id: 'prod_cable_6mm',
-    sku: 'CBL-DC-6MM-RED',
-    name: 'TUV Certified 6mm² Single-Core PV Solar Cable (100m Roll, Red)',
-    brand: 'Havells / Coleman',
-    category: 'Solar cables',
-    model: 'PV1-F-6MM-R',
-    description: 'Tinned copper stranded wire, double insulation, UV resistant, halogen-free.',
-    unit: 'Roll',
-    purchaseCost: 58000,
-    retailPrice: 75000,
-    wholesalePrice: 69000,
-    installerPrice: 66000,
-    dealerPrice: 64000,
-    minSellingPrice: 62000,
-    currentStock: 0,
-    reorderLevel: 10,
-    warehouseLocation: 'Main Store - Dalute Road',
+    barcode: '489448900601',
     branchId: 'br_dalute_main',
-    branchName: 'Main Store - Dalute Road',
-    supplierId: 'sup_cables',
-    supplierName: 'Havells & Coleman Cable Depot Ibadan',
-    barcode: '890123456789',
-    status: 'active',
-    createdAt: '2026-02-15T09:00:00Z',
-    updatedAt: '2026-10-23T09:00:00Z',
-  },
-  {
-    id: 'prod_spd_dc',
-    sku: 'PRT-SPD-600V-DC',
-    name: 'Suntree 600V DC Surge Protective Device (SPD) 20-40kA',
-    brand: 'Suntree',
-    category: 'Surge protectors and breakers',
-    model: 'SUP2H-PV',
-    description: 'Modular DIN rail lightning and transient surge arrester for photovoltaic strings.',
-    unit: 'Unit',
-    purchaseCost: 14000,
-    retailPrice: 22000,
-    wholesalePrice: 19000,
-    installerPrice: 17500,
-    dealerPrice: 16500,
-    minSellingPrice: 15500,
-    currentStock: 0,
+    specs: { panelWattageW: 410, warrantyMonths: 144 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_panel_550w_jinko',
+    sku: 'PNL-JNK-550W',
+    name: '550W Jinko Solar Panel',
+    brand: 'Jinko Solar',
+    category: 'Solar Panels',
+    model: '550W Jinko',
+    description: 'Jinko 550W Tiger Pro / Neo high-output solar panel.',
+    price: 120000,
+    reorderLevel: 20,
+    supplierId: 'sup_jinko',
+    supplierName: 'Jinko Solar West Africa Distributors',
+    barcode: '489448900602',
+    branchId: 'br_dalute_main',
+    specs: { panelWattageW: 550, warrantyMonths: 144 },
+  }),
+  buildCatalogProduct({
+    id: 'prod_panel_620w_itel',
+    sku: 'PNL-ITEL-620W',
+    name: '620W Itel Bifacial Solar Panel',
+    brand: 'Itel',
+    category: 'Solar Panels',
+    model: '620W Itel',
+    description: 'Itel 620W high-wattage N-type bifacial solar panel.',
+    price: 138000,
     reorderLevel: 15,
-    warehouseLocation: 'Main Store - Dalute Road',
-    branchId: 'br_dalute_main',
-    branchName: 'Main Store - Dalute Road',
+    supplierId: 'sup_itel',
+    supplierName: 'Itel Energy Nigeria Official',
+    barcode: '489448900603',
+    specs: { panelWattageW: 620, warrantyMonths: 144 },
+  }),
+
+  // 7. CABLES
+  buildCatalogProduct({
+    id: 'prod_cable_dc_4mm',
+    sku: 'CBL-DC-4MM',
+    name: 'DC 4mm Solar Cable (per Meter)',
+    brand: 'Coleman / Havells',
+    category: 'Cables',
+    model: 'DC 4mm',
+    description: 'UV-resistant double-insulated 4mm² solar DC PV cable.',
+    unit: 'Meter',
+    price: 2700,
+    reorderLevel: 50,
     supplierId: 'sup_cables',
     supplierName: 'Havells & Coleman Cable Depot Ibadan',
-    barcode: '782910482910',
-    status: 'active',
-    createdAt: '2026-02-20T10:00:00Z',
-    updatedAt: '2026-10-20T10:00:00Z',
-  },
-  {
-    id: 'prod_mounting_kit',
-    sku: 'MNT-ALU-ROOF-4P',
-    name: 'Anodized Aluminum Solar Roof Rail & Mid/End Clamp Kit (4 Panels)',
-    brand: 'Offnot Solar Hardware',
-    category: 'Mounting accessories',
-    model: 'ALU-4P-PITCHED',
-    description: 'Corrosion-proof AL6005-T5 rail set with stainless steel SUS304 bolts for corrugated/tile roofs.',
-    unit: 'Set',
-    purchaseCost: 28000,
-    retailPrice: 42000,
-    wholesalePrice: 36000,
-    installerPrice: 34000,
-    dealerPrice: 32000,
-    minSellingPrice: 30000,
-    currentStock: 0,
-    reorderLevel: 8,
-    warehouseLocation: 'Warehouse 2 - Iwo Road Depot',
-    branchId: 'br_iwo_depot',
-    branchName: 'Warehouse 2 - Iwo Road Depot',
+    barcode: '489448900701',
+    branchId: 'br_dalute_main',
+  }),
+  buildCatalogProduct({
+    id: 'prod_cable_dc_6mm',
+    sku: 'CBL-DC-6MM',
+    name: 'DC 6mm Solar Cable (per Meter)',
+    brand: 'Coleman / Havells',
+    category: 'Cables',
+    model: 'DC 6mm',
+    description: 'UV-resistant double-insulated 6mm² solar DC PV cable.',
+    unit: 'Meter',
+    price: 3800,
+    reorderLevel: 50,
     supplierId: 'sup_cables',
     supplierName: 'Havells & Coleman Cable Depot Ibadan',
-    barcode: '782910482911',
-    status: 'active',
-    createdAt: '2026-03-01T14:00:00Z',
-    updatedAt: '2026-10-22T14:00:00Z',
-  },
-  {
-    id: 'prod_tubular_220ah',
-    sku: 'BAT-TUB-220AH-12V',
-    name: 'Luminous 220Ah / 12V Tall Tubular Deep Cycle Solar Battery',
-    brand: 'Luminous',
-    category: 'Tubular batteries',
-    model: 'TX220',
-    description: 'Heavy duty alloy grids with porous spine tubes for prolonged power outages in Nigeria.',
-    unit: 'Unit',
-    purchaseCost: 245000,
-    retailPrice: 295000,
-    wholesalePrice: 278000,
-    installerPrice: 270000,
-    dealerPrice: 265000,
-    minSellingPrice: 255000,
-    currentStock: 0,
-    reorderLevel: 6,
-    warehouseLocation: 'Main Store - Dalute Road',
+    barcode: '489448900702',
     branchId: 'br_dalute_main',
-    branchName: 'Main Store - Dalute Road',
-    supplierId: 'sup_felicity',
-    supplierName: 'Felicity Solar Direct Nigeria',
-    barcode: '890123984719',
-    specs: {
-      voltage: '12V',
-      chemistry: 'Tubular Gel',
-      warrantyMonths: 18,
-    },
-    status: 'active',
-    createdAt: '2026-02-18T10:00:00Z',
-    updatedAt: '2026-10-24T10:00:00Z',
-  },
+  }),
+  buildCatalogProduct({
+    id: 'prod_cable_ac_2_5mm',
+    sku: 'CBL-AC-2.5MM',
+    name: 'AC 2.5mm Flexible Power Cable (per Meter)',
+    brand: 'Coleman / Havells',
+    category: 'Cables',
+    model: 'AC 2.5mm',
+    description: 'Pure copper 2.5mm² AC distribution cable for inverter wiring.',
+    unit: 'Meter',
+    price: 600,
+    reorderLevel: 50,
+    supplierId: 'sup_cables',
+    supplierName: 'Havells & Coleman Cable Depot Ibadan',
+    barcode: '489448900703',
+    branchId: 'br_dalute_main',
+  }),
+  buildCatalogProduct({
+    id: 'prod_cable_ac_4mm',
+    sku: 'CBL-AC-4MM',
+    name: 'AC 4mm Flexible Power Cable (per Meter)',
+    brand: 'Coleman / Havells',
+    category: 'Cables',
+    model: 'AC 4mm',
+    description: 'Pure copper 4mm² AC inverter output cable.',
+    unit: 'Meter',
+    price: 900,
+    reorderLevel: 50,
+    supplierId: 'sup_cables',
+    supplierName: 'Havells & Coleman Cable Depot Ibadan',
+    barcode: '489448900704',
+    branchId: 'br_dalute_main',
+  }),
+  buildCatalogProduct({
+    id: 'prod_cable_ac_6mm',
+    sku: 'CBL-AC-6MM',
+    name: 'AC 6mm Heavy-Duty Power Cable (per Meter)',
+    brand: 'Coleman / Havells',
+    category: 'Cables',
+    model: 'AC 6mm',
+    description: 'Pure copper 6mm² heavy-load AC inverter distribution cable.',
+    unit: 'Meter',
+    price: 1500,
+    reorderLevel: 50,
+    supplierId: 'sup_cables',
+    supplierName: 'Havells & Coleman Cable Depot Ibadan',
+    barcode: '489448900705',
+    branchId: 'br_dalute_main',
+  }),
+
+  // 8. BREAKER BOX
+  buildCatalogProduct({
+    id: 'prod_box_2way',
+    sku: 'BRK-BOX-2WAY',
+    name: '2-Way DIN Rail Breaker Enclosure Box',
+    brand: 'Offnot Hardware',
+    category: 'Breaker Box',
+    model: '2Way box',
+    description: 'IP65 waterproof 2-way DIN rail distribution enclosure.',
+    price: 1500,
+    reorderLevel: 10,
+    supplierId: 'sup_cables',
+    supplierName: 'Havells & Coleman Cable Depot Ibadan',
+    barcode: '489448900801',
+  }),
+  buildCatalogProduct({
+    id: 'prod_box_4way',
+    sku: 'BRK-BOX-4WAY',
+    name: '4-Way DIN Rail Breaker Enclosure Box',
+    brand: 'Offnot Hardware',
+    category: 'Breaker Box',
+    model: '4way box',
+    description: '4-way DIN rail distribution box for DC/AC breakers and SPDs.',
+    price: 3000,
+    reorderLevel: 10,
+    supplierId: 'sup_cables',
+    supplierName: 'Havells & Coleman Cable Depot Ibadan',
+    barcode: '489448900802',
+  }),
+  buildCatalogProduct({
+    id: 'prod_box_6way',
+    sku: 'BRK-BOX-6WAY',
+    name: '6-Way DIN Rail Breaker Enclosure Box',
+    brand: 'Offnot Hardware',
+    category: 'Breaker Box',
+    model: '6way',
+    description: '6-way DIN rail protection box for solar combiner & AC changeovers.',
+    price: 3500,
+    reorderLevel: 10,
+    supplierId: 'sup_cables',
+    supplierName: 'Havells & Coleman Cable Depot Ibadan',
+    barcode: '489448900803',
+  }),
+  buildCatalogProduct({
+    id: 'prod_box_9way',
+    sku: 'BRK-BOX-9WAY',
+    name: '9-Way DIN Rail Breaker Enclosure Box',
+    brand: 'Offnot Hardware',
+    category: 'Breaker Box',
+    model: '9way',
+    description: '9-way distribution enclosure for hybrid inverter protection gear.',
+    price: 4500,
+    reorderLevel: 10,
+    supplierId: 'sup_cables',
+    supplierName: 'Havells & Coleman Cable Depot Ibadan',
+    barcode: '489448900804',
+  }),
+  buildCatalogProduct({
+    id: 'prod_box_13way',
+    sku: 'BRK-BOX-13WAY',
+    name: '13-Way DIN Rail Breaker Enclosure Box',
+    brand: 'Offnot Hardware',
+    category: 'Breaker Box',
+    model: '13way',
+    description: '13-way multi-string solar combiner and AC protection enclosure.',
+    price: 5000,
+    reorderLevel: 10,
+    supplierId: 'sup_cables',
+    supplierName: 'Havells & Coleman Cable Depot Ibadan',
+    barcode: '489448900805',
+  }),
 ];
 
 export const INITIAL_CUSTOMERS: Customer[] = [
@@ -1281,7 +1515,8 @@ export const StorageService = {
 
     const now = new Date().toISOString();
     const sales = this.getSales();
-    const invoiceNumber = `OFF-INV-${new Date().getFullYear()}-${1001 + sales.length}`;
+    const uniqueSuffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+    const invoiceNumber = `OFF-INV-${new Date().getFullYear()}-${1001 + sales.length}-${uniqueSuffix}`;
 
     let subtotal = 0;
     let discountTotal = 0;
@@ -1315,10 +1550,10 @@ export const StorageService = {
     const payments: PaymentRecord[] = [];
     if (paid > 0) {
       payments.push({
-        id: `pmt_${Date.now()}`,
+        id: `pmt_${Date.now()}_${uniqueSuffix}`,
         amount: paid,
         method: saleData.paymentMethod,
-        reference: `${saleData.paymentMethod.toUpperCase()}-${Date.now().toString().slice(-6)}`,
+        reference: `${saleData.paymentMethod.toUpperCase()}-${uniqueSuffix}`,
         paidAt: now,
         recordedBy: user.name,
         splitDetails: saleData.splitDetails,
@@ -1326,7 +1561,7 @@ export const StorageService = {
     }
 
     const newSale: Sale = {
-      id: `sale_${Date.now()}`,
+      id: `sale_${Date.now()}_${uniqueSuffix.toLowerCase()}`,
       invoiceNumber,
       customerId: saleData.customerId,
       customerName: saleData.customerName,
@@ -1337,6 +1572,7 @@ export const StorageService = {
       discountTotal,
       taxAmount: 0,
       grandTotal,
+      originalGrandTotal: grandTotal,
       paidAmount: paid,
       balanceDue,
       costOfGoodsSold,
@@ -1365,7 +1601,7 @@ export const StorageService = {
       prod.updatedAt = now;
 
       newMovements.push({
-        id: `mov_sale_${Date.now()}_${prod.sku}`,
+        id: `mov_sale_${Date.now()}_${uniqueSuffix}_${prod.sku}`,
         productId: prod.id,
         productName: prod.name,
         sku: prod.sku,
@@ -1742,7 +1978,207 @@ export const StorageService = {
     return { success: true };
   },
 
-  // 6. Record Customer Return & Refund with Reversal
+  // 6. Record Multi-Item or Full Customer Return & Refund with Net Revenue & Stock Reversal
+  processCustomerReturns(
+    saleId: string,
+    itemsToReturn: { productId: string; quantity: number }[],
+    reason: string,
+    user: User
+  ): {
+    success: boolean;
+    error?: string;
+    returnMovements?: StockMovement[];
+    updatedProducts?: Product[];
+    updatedSale?: Sale;
+    updatedCustomer?: Customer;
+    refundAmount?: number;
+  } {
+    if (!itemsToReturn || itemsToReturn.length === 0) {
+      return { success: false, error: 'Please select at least one product to refund.' };
+    }
+
+    const sales = this.getSales();
+    const sale = sales.find(s => s.id === saleId);
+    if (!sale) return { success: false, error: 'Sale record not found.' };
+
+    const products = this.getProducts();
+    const now = new Date().toISOString();
+    const batchSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+    // Validate all requested return items before mutating anything
+    for (const req of itemsToReturn) {
+      if (req.quantity <= 0) {
+        return { success: false, error: 'Return quantity must be greater than zero.' };
+      }
+      const item = sale.items.find(i => i.productId === req.productId);
+      if (!item) {
+        return { success: false, error: `Product ${req.productId} was not part of this sale.` };
+      }
+      const currentReturned = item.returnedQuantity || 0;
+      const availableToReturn = item.quantity - currentReturned;
+      if (req.quantity > availableToReturn) {
+        return {
+          success: false,
+          error: `Cannot return ${req.quantity}x "${item.productName}". Eligible remaining: ${availableToReturn}.`,
+        };
+      }
+      const prod = products.find(p => p.id === req.productId);
+      if (!prod) {
+        return { success: false, error: `Product "${item.productName}" not found in inventory catalog.` };
+      }
+    }
+
+    // Preserve original sale total prior to first refund
+    if (sale.originalGrandTotal === undefined) {
+      sale.originalGrandTotal = sale.grandTotal + (sale.refundAmount || 0);
+    }
+
+    if (!Array.isArray(sale.returnRecords)) {
+      sale.returnRecords = [];
+    }
+
+    const returnMovements: StockMovement[] = [];
+    const updatedProducts: Product[] = [];
+    let totalBatchRefund = 0;
+    let totalBatchCogsReversed = 0;
+
+    for (const req of itemsToReturn) {
+      const item = sale.items.find(i => i.productId === req.productId)!;
+      const prod = products.find(p => p.id === req.productId)!;
+
+      const previousStock = prod.currentStock;
+      const newStock = previousStock + req.quantity;
+      prod.currentStock = newStock;
+      prod.updatedAt = now;
+      updatedProducts.push(prod);
+
+      const currentReturned = item.returnedQuantity || 0;
+      const discountPortion = item.quantity > 0 ? ((item.discount || 0) / item.quantity) * req.quantity : 0;
+      const itemRefundAmount = Math.max(0, (item.unitPrice * req.quantity) - discountPortion);
+      const itemCogsReversed = (item.unitCost || prod.purchaseCost || 0) * req.quantity;
+
+      totalBatchRefund += itemRefundAmount;
+      totalBatchCogsReversed += itemCogsReversed;
+
+      item.returnedQuantity = currentReturned + req.quantity;
+      if (item.returnedQuantity >= item.quantity) {
+        item.returned = true;
+      }
+
+      const movement: StockMovement = {
+        id: `mov_ret_${Date.now()}_${batchSuffix}_${prod.sku}`,
+        productId: prod.id,
+        productName: prod.name,
+        sku: prod.sku,
+        type: 'customer_return',
+        quantity: req.quantity,
+        previousStock,
+        newStock,
+        unitCost: item.unitCost || prod.purchaseCost,
+        totalCost: itemCogsReversed,
+        referenceId: sale.invoiceNumber,
+        warehouseLocation: sale.warehouseLocation || prod.warehouseLocation,
+        branchId: sale.branchId || user.branchId,
+        branchName: sale.branchName || user.branchName,
+        reason: `Customer return & refund for #${sale.invoiceNumber}: ${reason}`,
+        performedByUserId: user.id,
+        performedByUserName: user.name,
+        timestamp: now,
+      };
+      returnMovements.push(movement);
+
+      const returnRecord: SaleReturnRecord = {
+        id: `ret_${Date.now()}_${batchSuffix}_${Math.random().toString(36).substring(2, 5)}`,
+        productId: prod.id,
+        productName: prod.name,
+        sku: prod.sku,
+        quantity: req.quantity,
+        refundAmount: itemRefundAmount,
+        reason,
+        timestamp: now,
+        performedByUserName: user.name,
+        previousStock,
+        newStock,
+      };
+      sale.returnRecords.unshift(returnRecord);
+    }
+
+    // Deduct refunded amount from active net daily/period revenue & profit
+    sale.returned = true;
+    sale.refunded = true;
+    sale.refundAmount = (sale.refundAmount || 0) + totalBatchRefund;
+    sale.refundReason = reason;
+    sale.refundedAt = now;
+    sale.refundedBy = user.name;
+    sale.refundedByUserId = user.id;
+
+    sale.grandTotal = Math.max(0, sale.grandTotal - totalBatchRefund);
+    sale.costOfGoodsSold = Math.max(0, sale.costOfGoodsSold - totalBatchCogsReversed);
+    sale.grossProfit = sale.grandTotal - sale.costOfGoodsSold;
+
+    let balReduction = 0;
+    if (sale.balanceDue > 0) {
+      balReduction = Math.min(sale.balanceDue, totalBatchRefund);
+      sale.balanceDue = Math.max(0, sale.balanceDue - balReduction);
+      const cashRefunded = Math.max(0, totalBatchRefund - balReduction);
+      sale.paidAmount = Math.max(0, sale.paidAmount - cashRefunded);
+    } else {
+      sale.paidAmount = Math.max(0, sale.paidAmount - totalBatchRefund);
+    }
+
+    sale.paymentStatus =
+      sale.grandTotal === 0 || sale.balanceDue === 0
+        ? 'paid'
+        : sale.paidAmount > 0
+        ? 'partial'
+        : 'unpaid';
+
+    // Update customer ledger balance
+    let updatedCustomer: Customer | undefined;
+    const customers = this.getCustomers();
+    const custIndex = customers.findIndex(c => c.id === sale.customerId);
+    if (custIndex !== -1) {
+      customers[custIndex].totalPurchases = Math.max(0, customers[custIndex].totalPurchases - totalBatchRefund);
+      if (balReduction > 0) {
+        customers[custIndex].outstandingBalance = Math.max(0, customers[custIndex].outstandingBalance - balReduction);
+      }
+      updatedCustomer = customers[custIndex];
+      this.saveCustomers(customers);
+    }
+
+    const movements = this.getStockMovements();
+    this.saveProducts(products);
+    this.saveSales(sales);
+    this.saveStockMovements([...returnMovements, ...movements]);
+
+    const itemSummary = itemsToReturn
+      .map(req => {
+        const prod = updatedProducts.find(p => p.id === req.productId);
+        return `${req.quantity}x ${prod?.name || req.productId}`;
+      })
+      .join(', ');
+
+    this.logAction({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      action: 'CUSTOMER_RETURN_PROCESSED',
+      module: 'sales',
+      recordId: sale.invoiceNumber,
+      details: `Refunded & restocked [${itemSummary}] for invoice #${sale.invoiceNumber}. Refund amount deducted: ₦${totalBatchRefund.toLocaleString()}. Reason: ${reason}`,
+    });
+
+    return {
+      success: true,
+      returnMovements,
+      updatedProducts,
+      updatedSale: sale,
+      updatedCustomer,
+      refundAmount: totalBatchRefund,
+    };
+  },
+
+  // Single-item wrapper delegating to multi-item processor
   processCustomerReturn(
     saleId: string,
     productId: string,
@@ -1757,124 +2193,14 @@ export const StorageService = {
     updatedSale?: Sale;
     refundAmount?: number;
   } {
-    const sales = this.getSales();
-    const sale = sales.find(s => s.id === saleId);
-    if (!sale) return { success: false, error: 'Sale record not found.' };
-
-    const item = sale.items.find(i => i.productId === productId);
-    if (!item) return { success: false, error: 'Product was not part of this sale.' };
-
-    const currentReturned = item.returnedQuantity || 0;
-    const availableToReturn = item.quantity - currentReturned;
-    if (quantity > availableToReturn) {
-      return {
-        success: false,
-        error: `Cannot return ${quantity} units. Customer bought ${item.quantity} (already returned: ${currentReturned}, remaining eligible: ${availableToReturn}).`,
-      };
-    }
-
-    const products = this.getProducts();
-    const prod = products.find(p => p.id === productId);
-    if (!prod) return { success: false, error: 'Product not found in inventory catalog.' };
-
-    const now = new Date().toISOString();
-    const previousStock = prod.currentStock;
-    const newStock = previousStock + quantity;
-    prod.currentStock = newStock;
-    prod.updatedAt = now;
-
-    // Calculate proportional refund amount taking any item-level discount into account
-    const discountPortion = item.quantity > 0 ? (item.discount / item.quantity) * quantity : 0;
-    const refundAmount = Math.max(0, (item.unitPrice * quantity) - discountPortion);
-
-    // Update item-level return state
-    item.returnedQuantity = currentReturned + quantity;
-    if (item.returnedQuantity >= item.quantity) {
-      item.returned = true;
-    }
-
-    const movement: StockMovement = {
-      id: `mov_ret_${Date.now()}_${prod.sku}`,
-      productId: prod.id,
-      productName: prod.name,
-      sku: prod.sku,
-      type: 'customer_return',
-      quantity: quantity,
-      previousStock,
-      newStock,
-      unitCost: item.unitCost,
-      totalCost: quantity * item.unitCost,
-      referenceId: sale.invoiceNumber,
-      warehouseLocation: sale.warehouseLocation || prod.warehouseLocation,
-      branchId: sale.branchId || user.branchId,
-      branchName: sale.branchName || user.branchName,
-      reason: `Customer return & refund for #${sale.invoiceNumber}: ${reason}`,
-      performedByUserId: user.id,
-      performedByUserName: user.name,
-      timestamp: now,
-    };
-
-    const returnRecord: SaleReturnRecord = {
-      id: `ret_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      productId: prod.id,
-      productName: prod.name,
-      sku: prod.sku,
-      quantity,
-      refundAmount,
-      reason,
-      timestamp: now,
-      performedByUserName: user.name,
-      previousStock,
-      newStock,
-    };
-
-    sale.returned = true;
-    sale.refunded = true;
-    sale.refundAmount = (sale.refundAmount || 0) + refundAmount;
-    sale.refundReason = reason;
-    sale.refundedAt = now;
-    sale.refundedBy = user.name;
-    sale.refundedByUserId = user.id;
-
-    if (!Array.isArray(sale.returnRecords)) {
-      sale.returnRecords = [];
-    }
-    sale.returnRecords.unshift(returnRecord);
-
-    // Update customer total purchases and ledger balance
-    const customers = this.getCustomers();
-    const custIndex = customers.findIndex(c => c.id === sale.customerId);
-    if (custIndex !== -1) {
-      customers[custIndex].totalPurchases = Math.max(0, customers[custIndex].totalPurchases - refundAmount);
-      if (sale.balanceDue > 0) {
-        const balReduction = Math.min(sale.balanceDue, refundAmount);
-        sale.balanceDue = Math.max(0, sale.balanceDue - balReduction);
-        customers[custIndex].outstandingBalance = Math.max(0, customers[custIndex].outstandingBalance - balReduction);
-      }
-      this.saveCustomers(customers);
-    }
-
-    const movements = this.getStockMovements();
-    this.saveProducts(products);
-    this.saveSales(sales);
-    this.saveStockMovements([movement, ...movements]);
-
-    this.logAction({
-      userId: user.id,
-      userName: user.name,
-      userRole: user.role,
-      action: 'CUSTOMER_RETURN_PROCESSED',
-      module: 'sales',
-      recordId: sale.invoiceNumber,
-      details: `Returned ${quantity}x ${prod.name} for invoice #${sale.invoiceNumber}. Restocked to ${prod.warehouseLocation} (+${quantity} units, new stock: ${newStock}). Refund amount: ₦${refundAmount.toLocaleString()}. Reason: ${reason}`,
-    });
-
+    const res = this.processCustomerReturns(saleId, [{ productId, quantity }], reason, user);
     return {
-      success: true,
-      returnMovement: movement,
-      updatedProduct: prod,
-      updatedSale: sale,
-      refundAmount,
+      success: res.success,
+      error: res.error,
+      returnMovement: res.returnMovements?.[0],
+      updatedProduct: res.updatedProducts?.[0],
+      updatedSale: res.updatedSale,
+      refundAmount: res.refundAmount,
     };
   },
 

@@ -340,7 +340,7 @@ export const Finance: React.FC = () => {
                         <span className="font-semibold text-slate-900">{exp.category}</span>
                       </td>
                       <td className="py-3 px-3 whitespace-nowrap text-xs text-slate-600">
-                        {exp.branchName || 'Tipper Garage (HQ)'}
+                        {exp.branchName || 'Head Office - Dugbe'}
                       </td>
                       <td className="py-3 px-3 text-slate-700 max-w-sm truncate">{exp.description}</td>
                       <td className="py-3 px-3 text-right font-mono font-bold tabular-nums text-rose-700">
@@ -373,7 +373,7 @@ export const Finance: React.FC = () => {
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         title="Record Operating Expense"
-        subtitle="Log operational overheads for Dalute Road and Tipper Garage facilities"
+        subtitle="Log operational overheads for Dugbe Head Office and Dalute Road facilities"
         maxWidth="md"
       >
         <form onSubmit={handleAddExpense} className="space-y-3">

@@ -34,13 +34,22 @@ import {
   KpiPerformanceRating,
   OfflineSyncItem,
 } from '../types';
-import { StorageService, INITIAL_CATEGORIES } from '../services/storage';
+import {
+  StorageService,
+  INITIAL_CATEGORIES,
+  INITIAL_SETTINGS,
+  INITIAL_BRANCHES,
+  INITIAL_SUPPLIERS,
+  INITIAL_PRODUCTS,
+} from '../services/storage';
 import {
   getAllowedTabsForUser,
   getDefaultTabForUser,
   canAccessAllBranches as checkCanAccessAllBranches,
+  getLagosDateKey,
+  getLagosMonthKey,
 } from '../utils/formatters';
-import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
+import { getSupabaseClient, isSupabaseConfigured, syncLocalToSupabase } from '../lib/supabase';
 import {
   fetchAllDataFromSupabase,
   saveProductToSupabase,
@@ -180,6 +189,12 @@ interface AppContextType {
     branchName?: string;
   }) => { success: boolean; sale?: Sale; error?: string };
   processReturn: (saleId: string, productId: string, quantity: number, reason: string) => { success: boolean; error?: string; updatedSale?: Sale };
+  processReturns: (
+    saleId: string,
+    itemsToReturn: { productId: string; quantity: number }[],
+    reason: string
+  ) => { success: boolean; error?: string; updatedSale?: Sale; refundAmount?: number };
+  applyGoLiveCatalogAndContacts: () => Promise<{ success: boolean; productCount: number; syncedToCloud: boolean }>;
 
   // Supplier & Purchasing
   saveSupplier: (supplier: Partial<Supplier>) => void;
@@ -311,6 +326,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateOfflineQueueCount();
   }, [updateOfflineQueueCount]);
 
+  const enqueueOfflineSafely = useCallback(
+    (
+      entityType: OfflineSyncItem['entityType'],
+      action: OfflineSyncItem['action'],
+      data: any
+    ) => {
+      StorageService.enqueueOfflineItem(entityType, action, data);
+      IndexedDbService.enqueueOfflineItem(entityType, action, data)
+        .catch((e: unknown) => console.warn('IndexedDB enqueueOfflineItem error:', e))
+        .finally(() => updateOfflineQueueCount());
+    },
+    [updateOfflineQueueCount]
+  );
+
   // Flush offline queue to Supabase when network is healthy (IndexedDB + Storage fallback)
   const flushOfflineSyncQueue = useCallback(async (): Promise<{ success: boolean; syncedCount: number; errors?: string[] }> => {
     if (!navigator.onLine) {
@@ -363,8 +392,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (isSupabaseConfigured() && item.data) {
             if (item.entityType === 'sale') {
               await saveSaleToSupabase(item.data);
+            } else if (item.entityType === 'sale_return') {
+              await saveSaleReturnToSupabase(
+                item.data.sale,
+                item.data.updatedProducts || [],
+                item.data.returnMovements || [],
+                item.data.updatedCustomer
+              );
             } else if (item.entityType === 'customer') {
               await saveCustomerToSupabase(item.data);
+            } else if (item.entityType === 'supplier') {
+              await saveSupplierToSupabase(item.data);
             } else if (item.entityType === 'expense') {
               await saveExpenseToSupabase(item.data);
             } else if (item.entityType === 'product') {
@@ -385,6 +423,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               await saveKpiToSupabase(item.data);
             } else if (item.entityType === 'kpi_log') {
               await saveKpiDailyLogToSupabase(item.data);
+            } else if (item.entityType === 'settings') {
+              await saveSettingsToSupabase(item.data);
+            } else if (item.entityType === 'role_permissions') {
+              const latestSettings = { ...StorageService.getSettings(), rolePermissions: item.data };
+              await saveSettingsToSupabase(latestSettings);
             }
           }
           synced++;
@@ -407,7 +450,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setOfflineQueueCount(0);
     } catch (e: any) {
       console.warn('Flush offline queue caught error:', e);
-      // Ensure queues don't remain stuck
       StorageService.clearOfflineQueue();
       await IndexedDbService.clearAll();
       setPendingTransactions([]);
@@ -419,16 +461,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: errors.length === 0, syncedCount: synced, errors: errors.length > 0 ? errors : undefined };
   }, []);
 
+  const syncInFlightRef = useRef(false);
+
   const syncWithSupabase = useCallback(async (): Promise<boolean> => {
     if (!isSupabaseConfigured()) {
       setIsSupabaseConnected(false);
       return false;
     }
 
+    if (syncInFlightRef.current) {
+      return false;
+    }
+    syncInFlightRef.current = true;
     setSupabaseLoading(true);
     setSupabaseSyncError(null);
 
     try {
+      // Flush any offline queued sales, returns, stock adjustments, or settings BEFORE pulling cloud state
+      if (navigator.onLine) {
+        const pendingTotal = Math.max(
+          StorageService.getOfflineQueueCount(),
+          await IndexedDbService.getPendingCount().catch(() => 0)
+        );
+        if (pendingTotal > 0) {
+          await flushOfflineSyncQueue();
+        }
+      }
+
       const cloudData = await fetchAllDataFromSupabase();
       if (cloudData) {
         if (cloudData.branches.length > 0) {
@@ -439,38 +498,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setProducts(cloudData.products);
           StorageService.saveProducts(cloudData.products);
         }
-        // Bidirectional Sales Reconciliation
+
+        // Bidirectional Sales & Refund Reconciliation (strict ID match)
         const localSales = StorageService.getSales();
-        const cloudSales = cloudData.sales || [];
-        const cloudSalesMap = new Map<string, Sale>();
+        const cloudSales = [...(cloudData.sales || [])];
+        const cloudSalesById = new Map<string, Sale>();
         cloudSales.forEach(s => {
-          cloudSalesMap.set(s.id, s);
-          if (s.invoiceNumber) cloudSalesMap.set(s.invoiceNumber, s);
+          cloudSalesById.set(s.id, s);
         });
 
         const missingInCloud: Sale[] = [];
+        const cloudNeedingRefundPush: Sale[] = [];
         for (const localSale of localSales) {
-          if (!cloudSalesMap.has(localSale.id) && !cloudSalesMap.has(localSale.invoiceNumber)) {
+          const cloudMatch = cloudSalesById.get(localSale.id);
+          if (!cloudMatch) {
             missingInCloud.push(localSale);
+          } else {
+            const localReturns = localSale.returnRecords?.length || 0;
+            const cloudReturns = cloudMatch.returnRecords?.length || 0;
+            if (localReturns > cloudReturns || (localSale.refundAmount || 0) > (cloudMatch.refundAmount || 0)) {
+              cloudNeedingRefundPush.push(localSale);
+            }
           }
         }
 
         if (missingInCloud.length > 0) {
-          console.log(`Auto-reconciliation: Found ${missingInCloud.length} local sales not in Supabase cloud. Auto-uploading now...`);
           for (const s of missingInCloud) {
             try {
               await saveSaleToSupabase(s);
               cloudSales.push(s);
-              cloudSalesMap.set(s.id, s);
+              cloudSalesById.set(s.id, s);
             } catch (err) {
               console.warn(`Failed to push local sale ${s.invoiceNumber} to Supabase:`, err);
             }
           }
         }
 
-        const finalSalesMap = new Map<string, Sale>();
-        [...localSales, ...cloudSales].forEach(s => finalSalesMap.set(s.id, s));
-        const mergedSales = Array.from(finalSalesMap.values()).sort(
+        if (cloudNeedingRefundPush.length > 0) {
+          for (const s of cloudNeedingRefundPush) {
+            try {
+              await saveSaleToSupabase(s);
+              const idx = cloudSales.findIndex(cs => cs.id === s.id);
+              if (idx !== -1) cloudSales[idx] = s;
+              cloudSalesById.set(s.id, s);
+            } catch (err) {
+              console.warn(`Failed to push refund update ${s.invoiceNumber} to Supabase:`, err);
+            }
+          }
+        }
+
+        const mergedSales = Array.from(cloudSalesById.values()).sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
 
@@ -517,6 +594,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (cloudData.settings) {
           setSettings(cloudData.settings);
           StorageService.saveSettings(cloudData.settings);
+          if (cloudData.settings.rolePermissions) {
+            StorageService.saveRolePermissions(cloudData.settings.rolePermissions);
+            setRolePermissions(cloudData.settings.rolePermissions);
+          }
         }
         if (cloudData.auditLogs.length > 0) {
           setAuditLogs(cloudData.auditLogs);
@@ -547,21 +628,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     } finally {
       setSupabaseLoading(false);
+      syncInFlightRef.current = false;
     }
-  }, []);
+  }, [flushOfflineSyncQueue]);
 
   // Monitor network online / offline transitions & trigger instant automatic sync
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      // Auto flush offline queue immediately when reconnecting
-      flushOfflineSyncQueue().then(res => {
-        if (res.syncedCount > 0) {
-          console.log(`Auto-synced ${res.syncedCount} queued items to Supabase cloud.`);
-        }
-      });
       if (isSupabaseConfigured()) {
         syncWithSupabase();
+      } else {
+        flushOfflineSyncQueue();
       }
     };
 
@@ -598,28 +676,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [syncWithSupabase]);
 
-  // Realtime multi-device sync: listen to sales & products changes broadcasted by Supabase
+  // Realtime multi-device sync across all operational tables (debounced to prevent floods)
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
     const client = getSupabaseClient();
     if (!client) return;
 
-    const channel = client
-      .channel('app_realtime_sales_sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, payload => {
-        console.log('Realtime change in sales table detected:', payload.eventType);
-        syncWithSupabase();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, payload => {
-        console.log('Realtime change in products table detected:', payload.eventType);
-        syncWithSupabase();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => {
-        syncWithSupabase();
-      })
-      .subscribe();
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRealtimeSync = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        if (navigator.onLine) {
+          syncWithSupabase();
+        }
+      }, 450);
+    };
 
-    // 25-second continuous heartbeat to ensure multi-device sync even when in background
+    const realtimeTables = [
+      'sales',
+      'products',
+      'customers',
+      'branches',
+      'company_settings',
+      'user_profiles',
+      'staff_kpis',
+      'kpi_daily_logs',
+      'stock_movements',
+      'purchase_orders',
+      'quotations',
+      'installation_projects',
+      'expenses',
+    ];
+
+    let channel = client.channel('app_realtime_all_modules');
+    realtimeTables.forEach(table => {
+      channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleRealtimeSync);
+    });
+    channel.subscribe();
+
+    // 25-second continuous heartbeat to ensure multi-device sync even after background resume
     const heartbeat = setInterval(() => {
       if (navigator.onLine) {
         syncWithSupabase();
@@ -627,6 +722,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 25000);
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       client.removeChannel(channel);
       clearInterval(heartbeat);
     };
@@ -722,8 +818,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return (
         loc.includes(targetBranch.name.toLowerCase()) ||
         loc.includes(targetBranch.code.toLowerCase()) ||
-        (targetBranch.isHeadquarters && loc.includes('tipper')) ||
-        (!targetBranch.isHeadquarters && loc.includes('dalute'))
+        (targetBranch.isHeadquarters && (loc.includes('dugbe') || loc.includes('sweetco') || loc.includes('head office'))) ||
+        (!targetBranch.isHeadquarters && (loc.includes('dalute') || loc.includes('tipper')))
       );
     });
   }, [purchaseOrders, effectiveBranchId, branches]);
@@ -781,28 +877,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveBranches(current);
     setBranches([...current]);
 
-    // Sync to Supabase if connected
-    try {
-      const client = getSupabaseClient();
-      if (client) {
-        client.from('branches').upsert({
-          id: savedBranch.id,
-          name: savedBranch.name,
-          code: savedBranch.code,
-          city: savedBranch.city,
-          state: savedBranch.state,
-          address: savedBranch.address,
-          phone: savedBranch.phone,
-          email: savedBranch.email,
-          manager_name: savedBranch.managerName,
-          is_headquarters: Boolean(savedBranch.isHeadquarters),
-          is_active: Boolean(savedBranch.isActive),
-        }).then(({ error }) => {
-          if (error) console.warn('Supabase branch sync note:', error.message);
-        });
-      }
-    } catch (e) {
-      console.warn('Supabase branch sync exception:', e);
+    // Sync to Supabase with offline queue fallback
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('branch', branchData.id ? 'update' : 'create', savedBranch);
+    } else {
+      saveBranchToSupabase(savedBranch).catch(() => {
+        enqueueOfflineSafely('branch', branchData.id ? 'update' : 'create', savedBranch);
+      });
     }
 
     StorageService.logAction({
@@ -834,30 +915,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveBranches(current);
     setBranches([...current]);
 
-    // Sync to Supabase
-    try {
-      const client = getSupabaseClient();
-      if (client) {
-        client.from('branches').upsert(
-          current.map(b => ({
-            id: b.id,
-            name: b.name,
-            code: b.code,
-            city: b.city,
-            state: b.state,
-            address: b.address,
-            phone: b.phone,
-            email: b.email,
-            manager_name: b.managerName,
-            is_headquarters: Boolean(b.isHeadquarters),
-            is_active: Boolean(b.isActive),
-          }))
-        ).then(({ error }) => {
-          if (error) console.warn('Supabase HQ sync note:', error.message);
-        });
-      }
-    } catch (e) {
-      console.warn('Supabase HQ sync exception:', e);
+    // Sync to Supabase with offline queue fallback
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      current.forEach(b => enqueueOfflineSafely('branch', 'update', b));
+    } else {
+      current.forEach(b => {
+        saveBranchToSupabase(b).catch(() => enqueueOfflineSafely('branch', 'update', b));
+      });
     }
 
     StorageService.logAction({
@@ -958,7 +1022,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Resolve branch assignment cleanly
     const branchObj = branches.find(b => b.id === staffData.branchId) || branches[0];
     const branchId = branchObj?.id || staffData.branchId || 'br_tipper_hq';
-    const branchName = branchObj?.name || staffData.branchName || 'Showroom - Tipper Garage (HQ)';
+    const branchName = branchObj?.name || staffData.branchName || 'Head Office - Dugbe (Opposite Sweetco)';
     const tempPassword = staffData.temporaryPassword?.trim() || `Offnot${Math.floor(1000 + Math.random() * 9000)}!`;
 
     const newStaff: StaffAccount = {
@@ -1000,29 +1064,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStaffAccounts(updatedStaff);
     setUsers(updatedUsers);
 
-    // Sync to Supabase user_profiles if Supabase is connected
-    try {
-      const client = getSupabaseClient();
-      if (client) {
-        client.from('user_profiles').upsert({
-          id: newId,
-          name: normalizedName,
-          username: normalizedUsername,
-          email: normalizedEmail,
-          phone: staffData.phone?.trim() || '',
-          role: staffData.role,
-          branch_id: branchId,
-          branch_name: branchName,
-          temporary_password: tempPassword,
-          status: staffData.status || 'active',
-          has_full_system_access: Boolean(staffData.hasFullSystemAccess),
-          can_access_all_branches: Boolean(staffData.canAccessAllBranches),
-        }).then(({ error }) => {
-          if (error) console.warn('Supabase staff profile sync notice:', error.message);
-        });
-      }
-    } catch (e) {
-      console.warn('Supabase profile sync exception:', e);
+    // Sync to Supabase user_profiles (with offline queue fallback)
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('staff', 'create', newStaff);
+    } else {
+      saveStaffProfileToSupabase(newStaff).catch(() => {
+        enqueueOfflineSafely('staff', 'create', newStaff);
+      });
     }
 
     StorageService.logAction({
@@ -1069,30 +1117,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStaffAccounts([...currentStaff]);
     setUsers([...currentUsers]);
 
-    // Sync to Supabase user_profiles
-    try {
-      const client = getSupabaseClient();
-      if (client) {
-        const updated = currentStaff[staffIdx];
-        client.from('user_profiles').upsert({
-          id: updated.id,
-          name: updated.name,
-          username: updated.username,
-          email: updated.email,
-          phone: updated.phone || '',
-          role: updated.role,
-          branch_id: updated.branchId,
-          branch_name: updated.branchName,
-          status: updated.status,
-          temporary_password: updated.temporaryPassword,
-          has_full_system_access: Boolean(updated.hasFullSystemAccess),
-          can_access_all_branches: Boolean(updated.canAccessAllBranches),
-        }).then(({ error }) => {
-          if (error) console.warn('Supabase staff update notice:', error.message);
-        });
-      }
-    } catch (e) {
-      console.warn('Supabase staff update sync error:', e);
+    const updatedStaffProfile = currentStaff[staffIdx];
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('staff', 'update', updatedStaffProfile);
+    } else {
+      saveStaffProfileToSupabase(updatedStaffProfile).catch(() => {
+        enqueueOfflineSafely('staff', 'update', updatedStaffProfile);
+      });
     }
 
     StorageService.logAction({
@@ -1136,15 +1167,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUsers(filteredUsers);
 
     // Also delete from Supabase user_profiles if connected
-    try {
-      const client = getSupabaseClient();
-      if (client) {
-        client.from('user_profiles').delete().eq('id', id).then(({ error }) => {
-          if (error) console.warn('Supabase delete staff notice:', error.message);
-        });
-      }
-    } catch (e) {
-      console.warn('Supabase delete staff exception:', e);
+    if (isSupabaseConfigured()) {
+      deleteStaffProfileFromSupabase(id).catch(e => console.warn('Supabase delete staff notice:', e));
     }
 
     StorageService.logAction({
@@ -1207,7 +1231,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateRolePermission = (role: UserRole, permission: PermissionKey, enabled: boolean) => {
     StorageService.updateRolePermission(role, permission, enabled);
-    setRolePermissions(StorageService.getRolePermissions());
+    const updatedMap = StorageService.getRolePermissions();
+    setRolePermissions(updatedMap);
+
+    // Sync permission changes inside company_settings across all devices
+    const updatedSettings: CompanySettings = {
+      ...StorageService.getSettings(),
+      rolePermissions: updatedMap,
+    };
+    StorageService.saveSettings(updatedSettings);
+    setSettings(updatedSettings);
+
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('role_permissions', 'update', updatedMap);
+    } else {
+      saveSettingsToSupabase(updatedSettings).catch(() => {
+        enqueueOfflineSafely('role_permissions', 'update', updatedMap);
+      });
+    }
+
     StorageService.logAction({
       userId: currentUser.id,
       userName: currentUser.name,
@@ -1222,8 +1264,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const assignStaffRole = (staffId: string, newRole: UserRole): { success: boolean; error?: string } => {
     const res = StorageService.assignStaffRole(staffId, newRole);
     if (res.success) {
-      setStaffAccounts(StorageService.getStaffAccounts());
+      const updatedStaffList = StorageService.getStaffAccounts();
+      setStaffAccounts(updatedStaffList);
       setUsers(StorageService.getUsers());
+
+      const updatedStaff = updatedStaffList.find(s => s.id === staffId);
+      if (updatedStaff) {
+        if (!navigator.onLine || !isSupabaseConfigured()) {
+          enqueueOfflineSafely('staff', 'update', updatedStaff);
+        } else {
+          saveStaffProfileToSupabase(updatedStaff).catch(() => {
+            enqueueOfflineSafely('staff', 'update', updatedStaff);
+          });
+        }
+      }
+
       StorageService.logAction({
         userId: currentUser.id,
         userName: currentUser.name,
@@ -1427,7 +1482,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         staffRole: staffMember?.role || kpiData.staffRole || 'sales_rep',
         branchId: kpiData.branchId || staffMember?.branchId || activeBranchId,
         branchName: kpiData.branchName || staffMember?.branchName || 'Offnot Branch',
-        period: kpiData.period || new Date().toISOString().slice(0, 7),
+        period: kpiData.period || getLagosMonthKey(),
         monthlySalesTarget: Number(kpiData.monthlySalesTarget) || 2500000,
         actualSalesAchieved: Number(kpiData.actualSalesAchieved) || 0,
         grossProfitTarget: Number(kpiData.grossProfitTarget) || 500000,
@@ -1468,7 +1523,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveStaffKpis(currentKpis);
     setStaffKpis([...currentKpis]);
 
-    saveKpiToSupabase(savedKpi).catch(e => console.warn('Supabase KPI sync note:', e));
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('kpi', kpiData.id ? 'update' : 'create', savedKpi);
+    } else {
+      saveKpiToSupabase(savedKpi).catch(() => enqueueOfflineSafely('kpi', 'update', savedKpi));
+    }
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -1504,7 +1563,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveStaffKpis(currentKpis);
     setStaffKpis([...currentKpis]);
 
-    saveKpiToSupabase(currentKpis[idx]).catch(e => console.warn('Supabase KPI sync note:', e));
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('kpi', 'update', currentKpis[idx]);
+    } else {
+      saveKpiToSupabase(currentKpis[idx]).catch(() => enqueueOfflineSafely('kpi', 'update', currentKpis[idx]));
+    }
 
     const notif: AppNotification = {
       id: `notif_kpi_acc_${Date.now()}`,
@@ -1565,7 +1628,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveStaffKpis(currentKpis);
     setStaffKpis([...currentKpis]);
 
-    saveKpiToSupabase(currentKpis[idx]).catch(e => console.warn('Supabase KPI sync note:', e));
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('kpi', 'update', currentKpis[idx]);
+    } else {
+      saveKpiToSupabase(currentKpis[idx]).catch(() => enqueueOfflineSafely('kpi', 'update', currentKpis[idx]));
+    }
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -1608,7 +1675,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveStaffKpis(currentKpis);
     setStaffKpis([...currentKpis]);
 
-    saveKpiToSupabase(currentKpis[idx]).catch(e => console.warn('Supabase KPI sync note:', e));
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('kpi', 'update', currentKpis[idx]);
+    } else {
+      saveKpiToSupabase(currentKpis[idx]).catch(() => enqueueOfflineSafely('kpi', 'update', currentKpis[idx]));
+    }
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -1637,7 +1708,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       kpiId,
       staffId: target.staffId,
-      logDate: log.logDate || new Date().toISOString().slice(0, 10),
+      logDate: log.logDate || getLagosDateKey(),
       activitiesCompleted: log.activitiesCompleted,
       itemsHandled: Number(log.itemsHandled) || 0,
       revenueGenerated: Number(log.revenueGenerated) || 0,
@@ -1658,8 +1729,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveStaffKpis(currentKpis);
     setStaffKpis([...currentKpis]);
 
-    saveKpiToSupabase(currentKpis[idx]).catch(e => console.warn('Supabase KPI sync note:', e));
-    saveKpiDailyLogToSupabase(newLog).catch(e => console.warn('Supabase KPI log note:', e));
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('kpi', 'update', currentKpis[idx]);
+      enqueueOfflineSafely('kpi_log', 'create', newLog);
+    } else {
+      saveKpiToSupabase(currentKpis[idx]).catch(() => enqueueOfflineSafely('kpi', 'update', currentKpis[idx]));
+      saveKpiDailyLogToSupabase(newLog).catch(() => enqueueOfflineSafely('kpi_log', 'create', newLog));
+    }
 
     return { success: true };
   };
@@ -1670,7 +1746,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveStaffKpis(filtered);
     setStaffKpis(filtered);
 
-    deleteKpiFromSupabase(kpiId).catch(e => console.warn('Supabase KPI delete note:', e));
+    if (isSupabaseConfigured()) {
+      deleteKpiFromSupabase(kpiId).catch(e => console.warn('Supabase KPI delete note:', e));
+    }
     return { success: true };
   };
 
@@ -1709,24 +1787,171 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Recompute staff monthly KPIs automatically whenever sales or refunds occur
+  const syncSalesToStaffKpis = (targetSale: Sale, allSalesSnapshot: Sale[]) => {
+    const saleMonth = getLagosMonthKey(new Date(targetSale.createdAt));
+    const currentKpis = StorageService.getStaffKpis();
+    let changed = false;
+
+    const updatedKpis = currentKpis.map(kpi => {
+      if (kpi.period !== saleMonth) return kpi;
+      const matchesStaff =
+        kpi.staffId === targetSale.salesRepId ||
+        (kpi.staffName && targetSale.salesRepName && kpi.staffName.toLowerCase() === targetSale.salesRepName.toLowerCase());
+      if (!matchesStaff) return kpi;
+
+      const staffMonthSales = allSalesSnapshot.filter(s => {
+        if (getLagosMonthKey(new Date(s.createdAt)) !== saleMonth) return false;
+        return (
+          s.salesRepId === kpi.staffId ||
+          (s.salesRepName && kpi.staffName && s.salesRepName.toLowerCase() === kpi.staffName.toLowerCase())
+        );
+      });
+
+      const netSalesTotal = staffMonthSales.reduce((sum, s) => sum + (s.grandTotal || 0), 0);
+      const netProfitTotal = staffMonthSales.reduce((sum, s) => sum + (s.grossProfit || 0), 0);
+
+      changed = true;
+      const updatedKpi: StaffKpi = {
+        ...kpi,
+        actualSalesAchieved: Math.max(0, netSalesTotal),
+        actualGrossProfit: Math.max(0, netProfitTotal),
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (!navigator.onLine || !isSupabaseConfigured()) {
+        enqueueOfflineSafely('kpi', 'update', updatedKpi);
+      } else {
+        saveKpiToSupabase(updatedKpi).catch(() => enqueueOfflineSafely('kpi', 'update', updatedKpi));
+      }
+
+      return updatedKpi;
+    });
+
+    if (changed) {
+      StorageService.saveStaffKpis(updatedKpis);
+      setStaffKpis(updatedKpis);
+    }
+  };
+
+  // Apply official 36-SKU price list & verified Dugbe HQ / Dalute branch contacts without wiping stock
+  const applyGoLiveCatalogAndContacts = async (): Promise<{
+    success: boolean;
+    productCount: number;
+    syncedToCloud: boolean;
+  }> => {
+    const existingSettings = StorageService.getSettings();
+    const mergedSettings: CompanySettings = {
+      ...INITIAL_SETTINGS,
+      pwaLogoUrl: existingSettings.pwaLogoUrl || INITIAL_SETTINGS.pwaLogoUrl,
+      pwaAppTitle: existingSettings.pwaAppTitle || INITIAL_SETTINGS.pwaAppTitle,
+      pwaShortName: existingSettings.pwaShortName || INITIAL_SETTINGS.pwaShortName,
+      pwaThemeColor: existingSettings.pwaThemeColor || INITIAL_SETTINGS.pwaThemeColor,
+      pwaBackgroundColor: existingSettings.pwaBackgroundColor || INITIAL_SETTINGS.pwaBackgroundColor,
+      enablePwaPrompt: existingSettings.enablePwaPrompt !== undefined ? existingSettings.enablePwaPrompt : INITIAL_SETTINGS.enablePwaPrompt,
+      pwaPromptDelaySeconds: existingSettings.pwaPromptDelaySeconds || INITIAL_SETTINGS.pwaPromptDelaySeconds,
+      rolePermissions: existingSettings.rolePermissions || StorageService.getRolePermissions(),
+    };
+
+    const existingBranches = StorageService.getBranches();
+    const branchMap = new Map(existingBranches.map(b => [b.id, b]));
+    INITIAL_BRANCHES.forEach(b => branchMap.set(b.id, b));
+    const mergedBranches = Array.from(branchMap.values());
+
+    const existingSuppliers = StorageService.getSuppliers();
+    const supMap = new Map(existingSuppliers.map(s => [s.id, s]));
+    INITIAL_SUPPLIERS.forEach(s => supMap.set(s.id, s));
+    const mergedSuppliers = Array.from(supMap.values());
+
+    const existingProducts = StorageService.getProducts();
+    const existingBySku = new Map(existingProducts.map(p => [p.sku.trim().toLowerCase(), p]));
+    const updatedIds = new Set<string>();
+    const mergedCatalog: Product[] = INITIAL_PRODUCTS.map(official => {
+      const existing = existingBySku.get(official.sku.trim().toLowerCase());
+      const resolvedId = existing ? existing.id : official.id;
+      updatedIds.add(resolvedId);
+      return {
+        ...official,
+        id: resolvedId,
+        currentStock: existing ? existing.currentStock : official.currentStock,
+        createdAt: existing?.createdAt || official.createdAt,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    // Retain any extra custom SKUs added manually by admin
+    existingProducts.forEach(p => {
+      if (!updatedIds.has(p.id)) {
+        mergedCatalog.push(p);
+      }
+    });
+
+    StorageService.saveSettings(mergedSettings);
+    StorageService.saveBranches(mergedBranches);
+    StorageService.saveSuppliers(mergedSuppliers);
+    StorageService.saveProducts(mergedCatalog);
+
+    setSettings(mergedSettings);
+    setBranches(mergedBranches);
+    setSuppliers(mergedSuppliers);
+    setProducts(mergedCatalog);
+
+    let syncedToCloud = false;
+    if (isSupabaseConfigured() && navigator.onLine) {
+      try {
+        await syncLocalToSupabase({
+          branches: mergedBranches,
+          users: StorageService.getUsers(),
+          categories: INITIAL_CATEGORIES,
+          suppliers: mergedSuppliers,
+          products: mergedCatalog,
+          customers: StorageService.getCustomers(),
+          settings: mergedSettings,
+        });
+        await saveSettingsToSupabase(mergedSettings);
+        syncedToCloud = true;
+      } catch (e) {
+        console.warn('Cloud push warning during go-live catalog update:', e);
+      }
+    }
+
+    StorageService.logAction({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userRole: currentUser.role,
+      action: 'APPLY_GOLIVE_CATALOG_CONTACTS',
+      module: 'settings',
+      details: `Applied official 36-SKU Offnot Energy price list & Dugbe HQ / Dalute contacts (${mergedCatalog.length} total SKUs, live stock preserved).`,
+    });
+    setAuditLogs(StorageService.getAuditLogs());
+
+    return { success: true, productCount: mergedCatalog.length, syncedToCloud };
+  };
+
   const updateSettings = (newSettings: CompanySettings) => {
-    StorageService.saveSettings(newSettings);
-    setSettings(newSettings);
+    const mergedSettings: CompanySettings = {
+      ...newSettings,
+      rolePermissions: newSettings.rolePermissions || rolePermissions,
+    };
+    StorageService.saveSettings(mergedSettings);
+    setSettings(mergedSettings);
     StorageService.logAction({
       userId: currentUser.id,
       userName: currentUser.name,
       userRole: currentUser.role,
       action: 'UPDATE_SETTINGS',
       module: 'settings',
-      details: 'Updated company configuration, warehouses, PWA branding, and policy settings.',
+      details: 'Updated company configuration, warehouses, contacts, PWA branding, and policy settings.',
     });
     setAuditLogs(StorageService.getAuditLogs());
 
     // Live cloud persistence to Supabase with offline queue fallback
-    if (isSupabaseConfigured()) {
-      saveSettingsToSupabase(newSettings).catch(err => {
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('settings', 'update', mergedSettings);
+    } else {
+      saveSettingsToSupabase(mergedSettings).catch(err => {
         console.warn('saveSettingsToSupabase error, queuing offline:', err);
-        StorageService.enqueueOfflineItem('product', 'update', newSettings);
+        enqueueOfflineSafely('settings', 'update', mergedSettings);
       });
     }
   };
@@ -1765,7 +1990,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         sku: productData.sku || `SKU-${Date.now().toString().slice(-6)}`,
         name: productData.name || 'Unnamed Solar Item',
         brand: productData.brand || 'Offnot',
-        category: productData.category || 'Other solar accessories',
+        category: productData.category || 'Installation Accessories',
         model: productData.model || '',
         description: productData.description || '',
         unit: productData.unit || 'Unit',
@@ -1777,7 +2002,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         minSellingPrice: productData.minSellingPrice || 0,
         currentStock: 0, // Clean Zero Accounting Default
         reorderLevel: productData.reorderLevel || 5,
-        warehouseLocation: productData.warehouseLocation || 'Main Store - Dalute Road',
+        warehouseLocation:
+          productData.warehouseLocation ||
+          settings.warehouses?.[0] ||
+          'Head Office Showroom - Opposite Sweetco, Dugbe Iyaganku Road, Ibadan',
         branchId: productData.branchId || currentUser.branchId,
         branchName: productData.branchName || currentUser.branchName,
         supplierId: productData.supplierId || '',
@@ -1795,10 +2023,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveProducts(currentProducts);
     setProducts([...currentProducts]);
 
-    // Live cloud persist
-    saveProductToSupabase(savedProduct).catch(err => {
-      console.warn('saveProductToSupabase error:', err);
-    });
+    // Live cloud persist with offline queue fallback
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('product', productData.id ? 'update' : 'create', savedProduct);
+    } else {
+      saveProductToSupabase(savedProduct).catch(err => {
+        console.warn('saveProductToSupabase error, queuing offline:', err);
+        enqueueOfflineSafely('product', productData.id ? 'update' : 'create', savedProduct);
+      });
+    }
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -1823,10 +2056,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveProducts(filtered);
     setProducts(filtered);
 
-    // Live cloud delete
-    deleteProductFromSupabase(id).catch(err => {
-      console.warn('deleteProductFromSupabase error:', err);
-    });
+    if (isSupabaseConfigured()) {
+      deleteProductFromSupabase(id).catch(err => {
+        console.warn('deleteProductFromSupabase error:', err);
+      });
+    }
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -1848,6 +2082,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser
     );
     if (res.success) {
+      const updatedProd = StorageService.getProducts().find(p => p.id === productId);
+      const latestMovement = StorageService.getStockMovements()[0];
+      if (!navigator.onLine || !isSupabaseConfigured()) {
+        if (updatedProd) enqueueOfflineSafely('product', 'update', updatedProd);
+        if (latestMovement) enqueueOfflineSafely('stock_movement', 'create', latestMovement);
+      } else {
+        if (updatedProd) {
+          saveProductToSupabase(updatedProd).catch(() => enqueueOfflineSafely('product', 'update', updatedProd));
+        }
+        if (latestMovement) {
+          saveStockMovementToSupabase(latestMovement).catch(() => enqueueOfflineSafely('stock_movement', 'create', latestMovement));
+        }
+      }
       refreshData();
     }
     return res;
@@ -1902,31 +2149,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               StorageService.enqueueOfflineItem('sale', 'create', res.sale);
             });
         }
+        syncSalesToStaffKpis(res.sale, StorageService.getSales());
       }
       refreshData();
     }
     return res;
   };
 
-  const processReturn = (saleId: string, productId: string, quantity: number, reason: string) => {
-    const res = StorageService.processCustomerReturn(saleId, productId, quantity, reason, currentUser);
-    if (res.success) {
-      if (isSupabaseConfigured() && res.updatedSale && res.updatedProduct && res.returnMovement) {
-        saveSaleReturnToSupabase(res.updatedSale, res.updatedProduct, res.returnMovement).catch(err => {
-          console.warn('Supabase sale return background sync warning:', err);
-        });
+  const processReturns = (
+    saleId: string,
+    itemsToReturn: { productId: string; quantity: number }[],
+    reason: string
+  ) => {
+    const res = StorageService.processCustomerReturns(saleId, itemsToReturn, reason, currentUser);
+    if (res.success && res.updatedSale) {
+      const payload = {
+        id: `ret_batch_${res.updatedSale.id}_${Date.now()}`,
+        sale: res.updatedSale,
+        updatedProducts: res.updatedProducts || [],
+        returnMovements: res.returnMovements || [],
+        updatedCustomer: res.updatedCustomer,
+      };
+      if (!navigator.onLine || !isSupabaseConfigured()) {
+        enqueueOfflineSafely('sale_return', 'update', payload);
       } else {
-        if (res.updatedProduct) StorageService.enqueueOfflineItem('product', 'update', res.updatedProduct);
-        if (res.updatedSale) StorageService.enqueueOfflineItem('sale', 'update', res.updatedSale);
-        if (res.returnMovement) StorageService.enqueueOfflineItem('stock_movement', 'create', res.returnMovement);
+        saveSaleReturnToSupabase(
+          res.updatedSale,
+          res.updatedProducts || [],
+          res.returnMovements || [],
+          res.updatedCustomer
+        )
+          .then(syncRes => {
+            if (!syncRes.success) {
+              enqueueOfflineSafely('sale_return', 'update', payload);
+            }
+          })
+          .catch(() => {
+            enqueueOfflineSafely('sale_return', 'update', payload);
+          });
       }
+      syncSalesToStaffKpis(res.updatedSale, StorageService.getSales());
       refreshData();
     }
     return {
       success: res.success,
       error: res.error,
       updatedSale: res.updatedSale,
+      refundAmount: res.refundAmount,
     };
+  };
+
+  const processReturn = (saleId: string, productId: string, quantity: number, reason: string) => {
+    return processReturns(saleId, [{ productId, quantity }], reason);
   };
 
   // Suppliers
@@ -1963,11 +2237,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveSuppliers(current);
     setSuppliers([...current]);
 
-    // Live cloud persist
-    saveSupplierToSupabase(savedSup).catch(err => {
-      console.warn('saveSupplierToSupabase error:', err);
-    });
-    setSuppliers([...current]);
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('supplier', supplierData.id ? 'update' : 'create', savedSup);
+    } else {
+      saveSupplierToSupabase(savedSup).catch(err => {
+        console.warn('saveSupplierToSupabase error, queuing offline:', err);
+        enqueueOfflineSafely('supplier', supplierData.id ? 'update' : 'create', savedSup);
+      });
+    }
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -2003,7 +2280,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       paidAmount: poData.paidAmount || 0,
       status: poData.status || 'pending_approval',
       createdAt: now,
-      warehouseLocation: poData.warehouseLocation || 'Main Store - Dalute Road',
+      warehouseLocation:
+        poData.warehouseLocation ||
+        settings.warehouses?.[0] ||
+        'Head Office Showroom - Opposite Sweetco, Dugbe Iyaganku Road, Ibadan',
       expectedDeliveryDate: poData.expectedDeliveryDate,
       notes: poData.notes,
     };
@@ -2012,10 +2292,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.savePurchaseOrders(current);
     setPurchaseOrders([...current]);
 
-    // Live cloud persist
-    savePurchaseOrderToSupabase(newPo).catch(err => {
-      console.warn('savePurchaseOrderToSupabase error:', err);
-    });
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('purchase_order', 'create', newPo);
+    } else {
+      savePurchaseOrderToSupabase(newPo).catch(err => {
+        console.warn('savePurchaseOrderToSupabase error:', err);
+        enqueueOfflineSafely('purchase_order', 'create', newPo);
+      });
+    }
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -2043,10 +2327,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       StorageService.savePurchaseOrders(current);
       setPurchaseOrders([...current]);
 
-      // Live cloud persist
-      savePurchaseOrderToSupabase(po).catch(err => {
-        console.warn('savePurchaseOrderToSupabase error:', err);
-      });
+      if (!navigator.onLine || !isSupabaseConfigured()) {
+        enqueueOfflineSafely('purchase_order', 'update', po);
+      } else {
+        savePurchaseOrderToSupabase(po).catch(err => {
+          console.warn('savePurchaseOrderToSupabase error:', err);
+          enqueueOfflineSafely('purchase_order', 'update', po);
+        });
+      }
 
       StorageService.logAction({
         userId: currentUser.id,
@@ -2064,6 +2352,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const receiveGoods = (poId: string, receivedItems: { productId: string; receivedQty: number }[], warehouseLocation: string) => {
     const res = StorageService.receivePurchaseOrderGoods(poId, receivedItems, warehouseLocation, currentUser);
     if (res.success) {
+      const updatedPo = StorageService.getPurchaseOrders().find(p => p.id === poId);
+      const updatedProdIds = new Set(receivedItems.filter(r => r.receivedQty > 0).map(r => r.productId));
+      const updatedProducts = StorageService.getProducts().filter(p => updatedProdIds.has(p.id));
+      const newMovements = StorageService.getStockMovements()
+        .filter(m => m.type === 'goods_received' && (!updatedPo || m.referenceId === updatedPo.poNumber))
+        .slice(0, Math.max(1, updatedProdIds.size));
+
+      if (!navigator.onLine || !isSupabaseConfigured()) {
+        if (updatedPo) enqueueOfflineSafely('purchase_order', 'update', updatedPo);
+        updatedProducts.forEach(p => enqueueOfflineSafely('product', 'update', p));
+        newMovements.forEach(m => enqueueOfflineSafely('stock_movement', 'create', m));
+      } else {
+        if (updatedPo) {
+          savePurchaseOrderToSupabase(updatedPo).catch(() => enqueueOfflineSafely('purchase_order', 'update', updatedPo));
+        }
+        updatedProducts.forEach(p => {
+          saveProductToSupabase(p).catch(() => enqueueOfflineSafely('product', 'update', p));
+        });
+        newMovements.forEach(m => {
+          saveStockMovementToSupabase(m).catch(() => enqueueOfflineSafely('stock_movement', 'create', m));
+        });
+      }
       refreshData();
     }
     return res;
@@ -2077,9 +2387,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       StorageService.savePurchaseOrders(current);
       setPurchaseOrders([...current]);
 
-      savePurchaseOrderToSupabase(po).catch(err => {
-        console.warn('savePurchaseOrderToSupabase payment error:', err);
-      });
+      if (!navigator.onLine || !isSupabaseConfigured()) {
+        enqueueOfflineSafely('purchase_order', 'update', po);
+      } else {
+        savePurchaseOrderToSupabase(po).catch(err => {
+          console.warn('savePurchaseOrderToSupabase payment error:', err);
+          enqueueOfflineSafely('purchase_order', 'update', po);
+        });
+      }
 
       StorageService.logAction({
         userId: currentUser.id,
@@ -2134,10 +2449,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveCustomers(current);
     setCustomers([...current]);
 
-    // Live cloud persist
-    saveCustomerToSupabase(savedCust).catch(err => {
-      console.warn('saveCustomerToSupabase error:', err);
-    });
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('customer', custData.id ? 'update' : 'create', savedCust);
+    } else {
+      saveCustomerToSupabase(savedCust).catch(err => {
+        console.warn('saveCustomerToSupabase error:', err);
+        enqueueOfflineSafely('customer', custData.id ? 'update' : 'create', savedCust);
+      });
+    }
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -2199,10 +2518,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveQuotations(current);
     setQuotations([...current]);
 
-    // Live cloud persist
-    saveQuotationToSupabase(savedQ).catch(err => {
-      console.warn('saveQuotationToSupabase error:', err);
-    });
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('quotation', qData.id ? 'update' : 'create', savedQ);
+    } else {
+      saveQuotationToSupabase(savedQ).catch(err => {
+        console.warn('saveQuotationToSupabase error:', err);
+        enqueueOfflineSafely('quotation', qData.id ? 'update' : 'create', savedQ);
+      });
+    }
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -2242,7 +2565,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       items: saleItems,
       paymentMethod: 'bank_transfer',
       paidAmount: q.totalAmount,
-      warehouseLocation: 'Main Store - Dalute Road',
+      warehouseLocation:
+        settings.warehouses?.[0] ||
+        'Head Office Showroom - Opposite Sweetco, Dugbe Iyaganku Road, Ibadan',
       notes: `Converted from Quotation #${q.quotationNumber}`,
     });
 
@@ -2251,6 +2576,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       q.convertedToSaleId = saleRes.sale.id;
       StorageService.saveQuotations(qList);
       setQuotations([...qList]);
+
+      if (!navigator.onLine || !isSupabaseConfigured()) {
+        enqueueOfflineSafely('quotation', 'update', q);
+      } else {
+        saveQuotationToSupabase(q).catch(() => enqueueOfflineSafely('quotation', 'update', q));
+      }
+
       return { success: true, saleId: saleRes.sale.id };
     }
 
@@ -2315,10 +2647,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveProjects(current);
     setProjects([...current]);
 
-    // Live cloud persist
-    saveProjectToSupabase(savedPrj).catch(err => {
-      console.warn('saveProjectToSupabase error:', err);
-    });
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('project', projectData.id ? 'update' : 'create', savedPrj);
+    } else {
+      saveProjectToSupabase(savedPrj).catch(err => {
+        console.warn('saveProjectToSupabase error:', err);
+        enqueueOfflineSafely('project', projectData.id ? 'update' : 'create', savedPrj);
+      });
+    }
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -2335,6 +2671,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const issueMaterialToProject = (projectId: string, productId: string, quantity: number, warehouseLocation: string) => {
     const res = StorageService.issueProjectMaterial(projectId, productId, quantity, warehouseLocation, currentUser);
     if (res.success) {
+      const updatedPrj = StorageService.getProjects().find(p => p.id === projectId);
+      const updatedProd = StorageService.getProducts().find(p => p.id === productId);
+      const latestMovement = StorageService.getStockMovements()[0];
+
+      if (!navigator.onLine || !isSupabaseConfigured()) {
+        if (updatedPrj) enqueueOfflineSafely('project', 'update', updatedPrj);
+        if (updatedProd) enqueueOfflineSafely('product', 'update', updatedProd);
+        if (latestMovement) enqueueOfflineSafely('stock_movement', 'create', latestMovement);
+      } else {
+        if (updatedPrj) saveProjectToSupabase(updatedPrj).catch(() => enqueueOfflineSafely('project', 'update', updatedPrj));
+        if (updatedProd) saveProductToSupabase(updatedProd).catch(() => enqueueOfflineSafely('product', 'update', updatedProd));
+        if (latestMovement) saveStockMovementToSupabase(latestMovement).catch(() => enqueueOfflineSafely('stock_movement', 'create', latestMovement));
+      }
       refreshData();
     }
     return res;
@@ -2343,6 +2692,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const returnMaterialFromProject = (projectId: string, productId: string, quantity: number, warehouseLocation: string) => {
     const res = StorageService.returnProjectMaterial(projectId, productId, quantity, warehouseLocation, currentUser);
     if (res.success) {
+      const updatedPrj = StorageService.getProjects().find(p => p.id === projectId);
+      const updatedProd = StorageService.getProducts().find(p => p.id === productId);
+      const latestMovement = StorageService.getStockMovements()[0];
+
+      if (!navigator.onLine || !isSupabaseConfigured()) {
+        if (updatedPrj) enqueueOfflineSafely('project', 'update', updatedPrj);
+        if (updatedProd) enqueueOfflineSafely('product', 'update', updatedProd);
+        if (latestMovement) enqueueOfflineSafely('stock_movement', 'create', latestMovement);
+      } else {
+        if (updatedPrj) saveProjectToSupabase(updatedPrj).catch(() => enqueueOfflineSafely('project', 'update', updatedPrj));
+        if (updatedProd) saveProductToSupabase(updatedProd).catch(() => enqueueOfflineSafely('product', 'update', updatedProd));
+        if (latestMovement) saveStockMovementToSupabase(latestMovement).catch(() => enqueueOfflineSafely('stock_movement', 'create', latestMovement));
+      }
       refreshData();
     }
     return res;
@@ -2368,10 +2730,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveExpenses(current);
     setExpenses([...current]);
 
-    // Live cloud persist
-    saveExpenseToSupabase(newExp).catch(err => {
-      console.warn('saveExpenseToSupabase error:', err);
-    });
+    if (!navigator.onLine || !isSupabaseConfigured()) {
+      enqueueOfflineSafely('expense', 'create', newExp);
+    } else {
+      saveExpenseToSupabase(newExp).catch(err => {
+        console.warn('saveExpenseToSupabase error:', err);
+        enqueueOfflineSafely('expense', 'create', newExp);
+      });
+    }
 
     StorageService.logAction({
       userId: currentUser.id,
@@ -2448,6 +2814,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       adjustStock,
       completeSale,
       processReturn,
+      processReturns,
+      applyGoLiveCatalogAndContacts,
       saveSupplier,
       createPurchaseOrder,
       updatePurchaseOrderStatus,

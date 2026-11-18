@@ -79,7 +79,7 @@ export const StaffManagement: React.FC = () => {
     role: 'sales_rep',
     phone: '',
     branchId: branches[0]?.id || 'br_tipper_hq',
-    branchName: branches[0]?.name || 'Showroom - Tipper Garage (HQ)',
+    branchName: branches[0]?.name || 'Head Office - Dugbe (Opposite Sweetco)',
     temporaryPassword: 'OffnotStaff2026!',
     status: 'active',
     hasFullSystemAccess: false,
@@ -88,7 +88,7 @@ export const StaffManagement: React.FC = () => {
 
   const handleOpenCreate = () => {
     setEditingStaff(null);
-    const defaultBranch = branches[0] || { id: 'br_tipper_hq', name: 'Showroom - Tipper Garage (HQ)' };
+    const defaultBranch = branches[0] || { id: 'br_tipper_hq', name: 'Head Office - Dugbe (Opposite Sweetco)' };
     setFormData({
       name: '',
       username: '',
@@ -139,7 +139,7 @@ export const StaffManagement: React.FC = () => {
     const cleanName = formData.name.trim();
     const cleanEmail = formData.email.trim().toLowerCase();
     const cleanUsername = (formData.username || cleanEmail.split('@')[0] || '').trim().toLowerCase().replace(/\s+/g, '_');
-    const selectedBranch = branches.find(b => b.id === formData.branchId) || branches[0] || { id: 'br_tipper_hq', name: 'Showroom - Tipper Garage (HQ)' };
+    const selectedBranch = branches.find(b => b.id === formData.branchId) || branches[0] || { id: 'br_tipper_hq', name: 'Head Office - Dugbe (Opposite Sweetco)' };
 
     if (!cleanName) {
       setFeedback({ type: 'error', text: 'Please enter the staff member\'s full name.' });

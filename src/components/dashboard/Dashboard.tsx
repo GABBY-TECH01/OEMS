@@ -31,7 +31,15 @@ import {
   Cell,
 } from 'recharts';
 import { useApp } from '../../context/AppContext';
-import { formatNaira, formatLagosDateTime, formatLagosDate, hasPermission } from '../../utils/formatters';
+import {
+  formatNaira,
+  formatLagosDateTime,
+  formatLagosDate,
+  hasPermission,
+  getLagosDateKey,
+  getLagosMonthKey,
+  isDateInLagosPeriod,
+} from '../../utils/formatters';
 import { StatCard } from '../common/CommonUI';
 
 type DateFilter = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'all';
@@ -77,59 +85,34 @@ export const Dashboard: React.FC = () => {
 
   const [dateFilter, setDateFilter] = useState<DateFilter>('month');
 
-  // Filter range calculation
+  // Filter range calculation strictly in Africa/Lagos (WAT) for Desktop/Mobile parity
   const filteredSales = useMemo(() => {
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay())).getTime();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    const startOfQuarter = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1).getTime();
-    const startOfYear = new Date(now.getFullYear(), 0, 1).getTime();
-
-    return sales.filter(s => {
-      const saleTime = new Date(s.createdAt).getTime();
-      switch (dateFilter) {
-        case 'today':
-          return saleTime >= startOfToday;
-        case 'week':
-          return saleTime >= startOfWeek;
-        case 'month':
-          return saleTime >= startOfMonth;
-        case 'quarter':
-          return saleTime >= startOfQuarter;
-        case 'year':
-          return saleTime >= startOfYear;
-        default:
-          return true;
-      }
-    });
+    return sales.filter(s => isDateInLagosPeriod(s.createdAt, dateFilter));
   }, [sales, dateFilter]);
 
   const filteredExpenses = useMemo(() => {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    return expenses.filter(e => new Date(e.createdAt).getTime() >= startOfMonth);
+    const currentLagosMonth = getLagosMonthKey();
+    return expenses.filter(e => getLagosMonthKey(new Date(e.createdAt)) === currentLagosMonth);
   }, [expenses]);
 
-  // Aggregate Metrics
+  // Aggregate Metrics (Africa/Lagos WAT)
   const todaySalesTotal = useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getLagosDateKey();
     return sales
-      .filter(s => s.createdAt.slice(0, 10) === todayStr)
+      .filter(s => getLagosDateKey(new Date(s.createdAt)) === todayStr)
       .reduce((sum, s) => sum + s.grandTotal, 0);
   }, [sales]);
 
   const weekSalesTotal = useMemo(() => {
-    const oneWeekAgo = Date.now() - 7 * 86400000;
     return sales
-      .filter(s => new Date(s.createdAt).getTime() >= oneWeekAgo)
+      .filter(s => isDateInLagosPeriod(s.createdAt, 'week'))
       .reduce((sum, s) => sum + s.grandTotal, 0);
   }, [sales]);
 
   const monthSalesTotal = useMemo(() => {
-    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+    const currentLagosMonth = getLagosMonthKey();
     return sales
-      .filter(s => new Date(s.createdAt).getTime() >= startOfMonth)
+      .filter(s => getLagosMonthKey(new Date(s.createdAt)) === currentLagosMonth)
       .reduce((sum, s) => sum + s.grandTotal, 0);
   }, [sales]);
 
@@ -183,20 +166,23 @@ export const Dashboard: React.FC = () => {
     [filteredExpenses]
   );
 
-  // Sales Trend Chart Data
+  // Sales Trend Chart Data (Africa/Lagos 7-day rolling window)
   const salesTrendData = useMemo(() => {
     const days: { [key: string]: { date: string; revenue: number; profit: number } } = {};
-    const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (6 - i));
-      const key = d.toISOString().slice(0, 10);
-      const label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const nowMs = Date.now();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(nowMs - (6 - i) * 86400000);
+      const key = getLagosDateKey(d);
+      const label = d.toLocaleDateString('en-GB', {
+        timeZone: 'Africa/Lagos',
+        day: 'numeric',
+        month: 'short',
+      });
       days[key] = { date: label, revenue: 0, profit: 0 };
-      return key;
-    });
+    }
 
     sales.forEach(sale => {
-      const key = sale.createdAt.slice(0, 10);
+      const key = getLagosDateKey(new Date(sale.createdAt));
       if (days[key]) {
         days[key].revenue += sale.grandTotal;
         days[key].profit += sale.grossProfit;
@@ -206,14 +192,18 @@ export const Dashboard: React.FC = () => {
     return Object.values(days);
   }, [sales]);
 
-  // Category Distribution
+  // Category Distribution (deducting refunded item quantities cleanly)
   const categorySalesData = useMemo(() => {
     const catMap: { [cat: string]: number } = {};
-    sales.forEach(sale => {
+    filteredSales.forEach(sale => {
       sale.items.forEach(item => {
+        const netQty = Math.max(0, item.quantity - (item.returnedQuantity || 0));
+        if (netQty <= 0) return;
+        const discountPerUnit = item.quantity > 0 ? (item.discount || 0) / item.quantity : 0;
+        const netItemRev = Math.max(0, (item.unitPrice - discountPerUnit) * netQty);
         const prod = products.find(p => p.id === item.productId);
-        const cat = prod?.category || 'Other solar accessories';
-        catMap[cat] = (catMap[cat] || 0) + item.subtotal;
+        const cat = prod?.category || 'Installation Accessories';
+        catMap[cat] = (catMap[cat] || 0) + netItemRev;
       });
     });
 
@@ -226,7 +216,7 @@ export const Dashboard: React.FC = () => {
       }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
-  }, [sales, products]);
+  }, [filteredSales, products]);
 
   const canSeeFinancials = hasPermission(currentUser.role, 'view_financials');
 
@@ -244,7 +234,7 @@ export const Dashboard: React.FC = () => {
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-            {activeBranch ? activeBranch.address || `${activeBranch.city}, Oyo State` : 'Consolidated performance across Tipper Garage, Dalute Road, and Iwo Road Hubs'}
+            {activeBranch ? activeBranch.address || `${activeBranch.city}, Oyo State` : 'Consolidated performance across Dugbe Head Office & Dalute Road Branch, Ibadan'}
           </p>
         </div>
 
@@ -481,7 +471,7 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-700">
-            <span>Branch: Dalute Road, Ibadan</span>
+            <span>{activeBranch ? activeBranch.name : 'Dugbe HQ & Dalute Road Branch, Ibadan'}</span>
             <button
               onClick={() => setActiveTab('reports')}
               className="text-emerald-800 hover:text-emerald-950 font-semibold"

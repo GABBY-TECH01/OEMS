@@ -18,7 +18,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { StaffKpi, KpiStatus, KpiPerformanceRating } from '../../types';
-import { formatNaira } from '../../utils/formatters';
+import { formatNaira, getLagosDateKey, getLagosMonthKey } from '../../utils/formatters';
 
 export const KpiDashboard: React.FC = () => {
   const {
@@ -35,7 +35,7 @@ export const KpiDashboard: React.FC = () => {
     canAccessAllBranches,
   } = useApp();
 
-  const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), []);
+  const currentMonthStr = useMemo(() => getLagosMonthKey(), []);
 
   // Filter States
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
@@ -165,7 +165,7 @@ export const KpiDashboard: React.FC = () => {
 
   // Form states for Daily Log Modal
   const [logForm, setLogForm] = useState({
-    logDate: new Date().toISOString().slice(0, 10),
+    logDate: getLagosDateKey(),
     activitiesCompleted: '',
     revenueGenerated: 0,
     itemsHandled: 1,

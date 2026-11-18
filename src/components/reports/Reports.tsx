@@ -12,7 +12,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { formatNaira, formatLagosDateTime, exportToCSV } from '../../utils/formatters';
+import { formatNaira, formatLagosDateTime, exportToCSV, isDateInLagosPeriod } from '../../utils/formatters';
 
 type ReportType =
   | 'sales_summary'
@@ -29,32 +29,12 @@ export const Reports: React.FC = () => {
   const [activeReport, setActiveReport] = useState<ReportType>('sales_summary');
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'year' | 'all'>('month');
 
-  // Filter sales by date
+  // Filter sales strictly in Africa/Lagos (WAT)
   const filteredSales = useMemo(() => {
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay())).getTime();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    const startOfYear = new Date(now.getFullYear(), 0, 1).getTime();
-
-    return sales.filter(s => {
-      const t = new Date(s.createdAt).getTime();
-      switch (dateFilter) {
-        case 'today':
-          return t >= startOfToday;
-        case 'week':
-          return t >= startOfWeek;
-        case 'month':
-          return t >= startOfMonth;
-        case 'year':
-          return t >= startOfYear;
-        default:
-          return true;
-      }
-    });
+    return sales.filter(s => isDateInLagosPeriod(s.createdAt, dateFilter));
   }, [sales, dateFilter]);
 
-  // 1. Sales Summary Data
+  // 1. Sales Summary Data (Grand totals already reflect net post-refund figures)
   const salesSummary = useMemo(() => {
     const revenue = filteredSales.reduce((s, sale) => s + sale.grandTotal, 0);
     const cogs = filteredSales.reduce((s, sale) => s + sale.costOfGoodsSold, 0);
@@ -63,7 +43,7 @@ export const Reports: React.FC = () => {
     return { count: filteredSales.length, revenue, cogs, grossProfit, margin };
   }, [filteredSales]);
 
-  // 2. Product Margins Breakdown
+  // 2. Product Margins Breakdown (Deducting returned quantities cleanly)
   const productMargins = useMemo(() => {
     const map: {
       [id: string]: {
@@ -78,6 +58,9 @@ export const Reports: React.FC = () => {
 
     filteredSales.forEach(s => {
       s.items.forEach(item => {
+        const netQty = Math.max(0, item.quantity - (item.returnedQuantity || 0));
+        if (netQty <= 0) return;
+
         if (!map[item.productId]) {
           map[item.productId] = {
             name: item.productName,
@@ -88,9 +71,10 @@ export const Reports: React.FC = () => {
             grossProfit: 0,
           };
         }
-        const lineRev = item.unitPrice * item.quantity - item.discount;
-        const lineCost = item.unitCost * item.quantity;
-        map[item.productId].qtySold += item.quantity;
+        const discountPortion = item.quantity > 0 ? ((item.discount || 0) / item.quantity) * netQty : 0;
+        const lineRev = Math.max(0, item.unitPrice * netQty - discountPortion);
+        const lineCost = item.unitCost * netQty;
+        map[item.productId].qtySold += netQty;
         map[item.productId].revenue += lineRev;
         map[item.productId].cogs += lineCost;
         map[item.productId].grossProfit += lineRev - lineCost;
@@ -103,7 +87,13 @@ export const Reports: React.FC = () => {
   // 3. Slow Moving / Dead Stock Data
   const slowMovingProducts = useMemo(() => {
     const soldProductIds = new Set<string>();
-    filteredSales.forEach(s => s.items.forEach(i => soldProductIds.add(i.productId)));
+    filteredSales.forEach(s =>
+      s.items.forEach(i => {
+        if (i.quantity - (i.returnedQuantity || 0) > 0) {
+          soldProductIds.add(i.productId);
+        }
+      })
+    );
 
     return products
       .filter(p => !soldProductIds.has(p.id) && p.currentStock > 0)

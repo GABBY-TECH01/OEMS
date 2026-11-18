@@ -2,7 +2,18 @@ import React, { useState } from 'react';
 import { Printer, RotateCcw, CheckCircle2, ShieldCheck, Phone, Mail, MapPin } from 'lucide-react';
 import { Sale, CompanySettings } from '../../types';
 import { formatNaira, formatLagosDateTime } from '../../utils/formatters';
-import { BRAND_LOGO_URL } from '../../constants/branding';
+import {
+  BRAND_LOGO_URL,
+  BRAND_HEAD_OFFICE,
+  BRAND_BRANCH_OFFICE,
+  BRAND_PHONE_DUGBE,
+  BRAND_PHONE_DALUTE,
+  BRAND_PHONE_CUSTOMER_SERVICE,
+  BRAND_EMAIL,
+  BRAND_FACEBOOK,
+  BRAND_INSTAGRAM,
+  BRAND_TIKTOK,
+} from '../../constants/branding';
 
 interface PrintableReceiptProps {
   sale: Sale;
@@ -87,30 +98,88 @@ export const PrintableReceipt: React.FC<PrintableReceiptProps> = ({
             )}
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 const element = document.getElementById('printable-receipt-root');
                 if (!element) return;
+                const clone = element.cloneNode(true) as HTMLElement;
+                // Convert relative logo image into a self-contained data URL or absolute URL so offline download renders the full logo + receipt
+                const imgs = Array.from(clone.querySelectorAll('img'));
+                for (const img of imgs) {
+                  const srcAttr = img.getAttribute('src') || '';
+                  if (srcAttr && !srcAttr.startsWith('data:')) {
+                    try {
+                      const absUrl = srcAttr.startsWith('http') ? srcAttr : `${window.location.origin}${srcAttr}`;
+                      const resp = await fetch(absUrl);
+                      const blob = await resp.blob();
+                      const dataUrl = await new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(String(reader.result || absUrl));
+                        reader.onerror = () => reject(new Error('read fail'));
+                        reader.readAsDataURL(blob);
+                      });
+                      img.setAttribute('src', dataUrl);
+                    } catch {
+                      img.setAttribute('src', srcAttr.startsWith('http') ? srcAttr : `${window.location.origin}${srcAttr}`);
+                    }
+                  }
+                }
                 const receiptHtml = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Receipt-${sale.invoiceNumber}</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 24px; color: #0f172a; background: #f8fafc; }
-    .receipt-card { max-width: 440px; margin: 0 auto; background: #fff; border: 1px solid #cbd5e1; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 11px; }
-    th { border-bottom: 2px solid #0f172a; text-align: left; padding: 6px 4px; }
-    td { border-bottom: 1px solid #f1f5f9; padding: 6px 4px; }
-    .text-right { text-align: right; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 16px; color: #0f172a; background: #f1f5f9; font-size: 12px; line-height: 1.4; }
+    .receipt-card { max-width: 440px; margin: 0 auto; background: #ffffff; border: 1px solid #cbd5e1; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08); }
+    img { max-width: 96px; max-height: 96px; object-fit: contain; display: block; margin: 0 auto 8px; }
+    h1 { font-size: 17px; font-weight: 900; margin: 0; text-transform: uppercase; color: #0f172a; }
+    p { margin: 2px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 11px; }
+    th { border-bottom: 1.5px solid #0f172a; text-align: left; padding: 6px 4px; color: #334155; font-weight: 700; }
+    td { border-bottom: 1px solid #f1f5f9; padding: 6px 4px; vertical-align: top; }
     .text-center { text-align: center; }
-    .font-bold { font-weight: bold; }
-    .font-mono { font-family: monospace; }
-    @media print { body { background: #fff; padding: 0; } .receipt-card { border: none; box-shadow: none; max-width: 100%; padding: 0; } }
+    .text-right { text-align: right; }
+    .text-left { text-align: left; }
+    .font-bold, .font-black, .font-extrabold { font-weight: 700; }
+    .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .uppercase { text-transform: uppercase; }
+    .grid { display: grid; }
+    .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    .flex { display: flex; }
+    .flex-col { flex-direction: column; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .justify-center { justify-content: center; }
+    .gap-1 { gap: 4px; }
+    .gap-2 { gap: 8px; }
+    .border-b { border-bottom: 1px solid #cbd5e1; }
+    .border-t { border-top: 1px solid #cbd5e1; }
+    .border-dashed { border-style: dashed; }
+    .rounded, .rounded-lg, .rounded-md { border-radius: 6px; }
+    .bg-emerald-50 { background: #ecfdf5; border: 1px solid #a7f3d0; padding: 8px; margin: 8px 0; }
+    .bg-rose-50 { background: #fff1f2; border: 1px solid #fecdd3; padding: 6px; margin: 6px 0; }
+    .bg-slate-50, .bg-slate-100 { background: #f8fafc; padding: 6px; }
+    .text-emerald-800, .text-emerald-900, .text-emerald-950 { color: #065f46; }
+    .text-rose-700, .text-rose-800, .text-rose-900 { color: #9f1239; }
+    .text-slate-500, .text-slate-600 { color: #475569; }
+    .py-1 { padding-top: 4px; padding-bottom: 4px; }
+    .py-2 { padding-top: 8px; padding-bottom: 8px; }
+    .py-3 { padding-top: 10px; padding-bottom: 10px; }
+    .pt-3 { padding-top: 10px; }
+    .pb-3 { padding-bottom: 10px; }
+    .mt-1 { margin-top: 4px; }
+    .mt-2 { margin-top: 8px; }
+    .mt-4 { margin-top: 14px; }
+    .mb-2 { margin-bottom: 8px; }
+    svg { width: 12px; height: 12px; display: inline-block; vertical-align: middle; }
+    @media print { body { background: #fff; padding: 0; } .receipt-card { border: none; box-shadow: none; max-width: 100%; } }
   </style>
 </head>
 <body>
   <div class="receipt-card">
-    ${element.innerHTML}
+    ${clone.innerHTML}
   </div>
 </body>
 </html>`;
@@ -197,32 +266,45 @@ export const PrintableReceipt: React.FC<PrintableReceiptProps> = ({
                 Issuing Sales Hub / Store Branch
               </span>
               <span className="text-xs font-black text-emerald-950 print:text-black font-mono block mt-0.5">
-                {sale.branchName || 'Showroom - Tipper Garage (HQ)'}
+                {sale.branchName || 'Head Office - Dugbe (Opposite Sweetco)'}
               </span>
               <span className="text-[10px] text-slate-600 block mt-0.5">
-                Location: {sale.warehouseLocation || 'Tipper Garage, Ibadan'}
+                Location: {sale.warehouseLocation || settings.headOfficeAddress || BRAND_HEAD_OFFICE}
               </span>
             </div>
-            <div className="text-[10px] text-slate-600 mt-1 space-y-0.5 leading-snug">
-              {settings.location && (
-                <p className="flex items-center justify-center gap-1">
-                  <MapPin className="w-2.5 h-2.5 text-slate-400 shrink-0 inline" />
-                  <span>{settings.location}</span>
-                </p>
-              )}
-              <p className="flex items-center justify-center gap-2">
-                {settings.phone && (
-                  <span className="flex items-center gap-1">
-                    <Phone className="w-2.5 h-2.5 text-slate-400 shrink-0 inline" />
-                    <span>{settings.phone}</span>
-                  </span>
-                )}
-                {settings.email && (
-                  <span className="flex items-center gap-1">
-                    <Mail className="w-2.5 h-2.5 text-slate-400 shrink-0 inline" />
-                    <span>{settings.email}</span>
-                  </span>
-                )}
+            <div className="text-[10px] text-slate-600 mt-1.5 space-y-0.5 leading-snug">
+              <p className="flex items-center justify-center gap-1">
+                <MapPin className="w-2.5 h-2.5 text-slate-400 shrink-0 inline" />
+                <span>
+                  <strong className="text-slate-800">HQ:</strong>{' '}
+                  {settings.headOfficeAddress || BRAND_HEAD_OFFICE}
+                </span>
+              </p>
+              <p className="flex items-center justify-center gap-1">
+                <MapPin className="w-2.5 h-2.5 text-slate-400 shrink-0 inline" />
+                <span>
+                  <strong className="text-slate-800">Branch:</strong>{' '}
+                  {settings.branchOfficeAddress || BRAND_BRANCH_OFFICE}
+                </span>
+              </p>
+              <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 pt-0.5">
+                <span className="flex items-center gap-1">
+                  <Phone className="w-2.5 h-2.5 text-slate-400 shrink-0 inline" />
+                  <span>Dugbe: {settings.dugbePhone || BRAND_PHONE_DUGBE}</span>
+                </span>
+                <span>·</span>
+                <span>Dalute: {settings.dalutePhone || BRAND_PHONE_DALUTE}</span>
+              </p>
+              <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5">
+                <span>Customer Service: {settings.customerServicePhone || settings.phone || BRAND_PHONE_CUSTOMER_SERVICE}</span>
+                <span>·</span>
+                <span className="flex items-center gap-1">
+                  <Mail className="w-2.5 h-2.5 text-slate-400 shrink-0 inline" />
+                  <span>{settings.email || BRAND_EMAIL}</span>
+                </span>
+              </p>
+              <p className="text-[9px] text-slate-500 font-medium pt-0.5">
+                FB: {settings.facebookHandle || BRAND_FACEBOOK} · IG: {settings.instagramHandle || BRAND_INSTAGRAM} · TK: {settings.tiktokHandle || BRAND_TIKTOK}
               </p>
             </div>
           </div>
@@ -255,7 +337,7 @@ export const PrintableReceipt: React.FC<PrintableReceiptProps> = ({
             <div className="text-right">
               <span className="text-slate-500 block text-[10px] uppercase font-bold">Store / Branch:</span>
               <span className="text-slate-800 font-semibold truncate block">
-                {sale.branchName || 'Tipper Garage (HQ)'}
+                {sale.branchName || 'Head Office - Dugbe (Opposite Sweetco)'}
               </span>
               <span className="text-[10px] text-slate-500 block">
                 Rep: {sale.salesRepName || 'Sales Desk'}
@@ -369,8 +451,27 @@ export const PrintableReceipt: React.FC<PrintableReceiptProps> = ({
               </div>
             )}
 
+            {isRefunded && totalRefundAmount > 0 && (
+              <>
+                <div className="flex justify-between text-slate-700 pt-1 border-t border-slate-200">
+                  <span>Original Invoice Total:</span>
+                  <span className="font-mono tabular-nums">
+                    {formatNaira(
+                      sale.originalGrandTotal && sale.originalGrandTotal > 0
+                        ? sale.originalGrandTotal
+                        : sale.grandTotal + totalRefundAmount
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between font-bold text-rose-800 bg-rose-50 px-2 py-1 rounded">
+                  <span>Total Refunded (Deducted):</span>
+                  <span className="font-mono tabular-nums">-₦{formatNaira(totalRefundAmount, false)}</span>
+                </div>
+              </>
+            )}
+
             <div className="flex justify-between font-black text-sm text-slate-950 pt-1.5 border-t border-slate-300">
-              <span>Grand Total:</span>
+              <span>{isRefunded ? 'Net Final Total:' : 'Grand Total:'}</span>
               <span className="font-mono text-emerald-900 tabular-nums">
                 {formatNaira(sale.grandTotal)}
               </span>
@@ -378,7 +479,7 @@ export const PrintableReceipt: React.FC<PrintableReceiptProps> = ({
 
             <div className="flex justify-between text-slate-700 pt-0.5">
               <span>
-                Paid ({sale.paymentMethod ? sale.paymentMethod.replace('_', ' ') : 'Cash/Transfer'}):
+                Net Paid ({sale.paymentMethod ? sale.paymentMethod.replace('_', ' ') : 'Cash/Transfer'}):
               </span>
               <span className="font-mono font-bold text-emerald-800 tabular-nums">
                 {formatNaira(sale.paidAmount)}
@@ -389,14 +490,6 @@ export const PrintableReceipt: React.FC<PrintableReceiptProps> = ({
               <div className="flex justify-between text-rose-700 font-bold">
                 <span>Balance Due:</span>
                 <span className="font-mono tabular-nums">{formatNaira(sale.balanceDue)}</span>
-              </div>
-            )}
-
-            {/* Total Refund Deduction Line */}
-            {isRefunded && totalRefundAmount > 0 && (
-              <div className="mt-1 pt-1 border-t border-dashed border-rose-300 flex justify-between font-black text-rose-900 bg-rose-50 px-2 py-1 rounded">
-                <span>Total Refunded (Reversed):</span>
-                <span className="font-mono tabular-nums">-₦{formatNaira(totalRefundAmount, false)}</span>
               </div>
             )}
           </div>

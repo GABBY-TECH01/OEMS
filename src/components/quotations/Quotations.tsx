@@ -66,7 +66,7 @@ export const Quotations: React.FC = () => {
   const [applyVat, setApplyVat] = useState<boolean>(settings.enableTaxByDefault);
   const [validDays, setValidDays] = useState<number>(14);
   const [termsText, setTermsText] = useState(
-    '70% advance deposit upon quotation acceptance. 30% balance upon delivery and installation commissioning. Warranty: 2 years on hybrid inverters, 5 years on lithium storage banks. Offnot Energy, Dalute Road, Ibadan.'
+    '70% advance deposit upon quotation acceptance. 30% balance upon delivery and installation commissioning. Warranty: 2 years on hybrid inverters, 5 years on lithium storage banks. Offnot Energy — Opposite Sweetco, Dugbe Iyaganku Road & Inside Tipper Garage, Dalute Road, Ibadan.'
   );
 
   const effectiveSearch = searchQuery || globalSearchQuery;

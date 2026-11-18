@@ -33,6 +33,12 @@ export interface MigrationFile {
 
 export const MIGRATION_FILES: MigrationFile[] = [
   {
+    filename: '10_golive_catalog_contacts_refunds_patch.sql',
+    title: '🚀 Go-Live 36-SKU Catalog, Contacts & Cross-Device Refund Patch',
+    description: 'Updates Dugbe HQ & Dalute branch contacts, social handles, 36 confirmed SKU prices, item-level refund columns, and Supabase Realtime across all tables.',
+    category: 'master',
+  },
+  {
     filename: '09_company_logo_and_pwa_icons_patch.sql',
     title: '🎨 Company Logo & Dynamic PWA Manifest Patch',
     description: 'Stores Superadmin uploaded company logo URL in company_settings, creates company-assets storage bucket, and dynamically syncs PWA manifest icons.',

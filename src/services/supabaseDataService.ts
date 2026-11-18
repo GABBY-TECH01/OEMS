@@ -30,6 +30,18 @@ import {
   StaffKpi,
   KpiDailyLog,
 } from '../types';
+import { INITIAL_SETTINGS } from './storage';
+
+function isMissingColumnError(err: any): boolean {
+  const msg = String(err?.message || err || '').toLowerCase();
+  const code = String(err?.code || '');
+  return (
+    code === 'PGRST204' ||
+    code === '42703' ||
+    msg.includes('could not find') ||
+    (msg.includes('column') && (msg.includes('does not exist') || msg.includes('schema cache')))
+  );
+}
 
 export interface SupabaseDataset {
   branches: Branch[];
@@ -212,6 +224,17 @@ export async function fetchAllDataFromSupabase(): Promise<SupabaseDataset | null
       branchName: s.branch_name || undefined,
       notes: s.notes || undefined,
       returned: Boolean(s.is_returned || s.returned),
+      originalGrandTotal: s.original_grand_total !== undefined && s.original_grand_total !== null
+        ? Number(s.original_grand_total)
+        : undefined,
+      refundAmount: s.refund_amount !== undefined && s.refund_amount !== null
+        ? Number(s.refund_amount)
+        : undefined,
+      refundReason: s.refund_reason || undefined,
+      refundedAt: s.refunded_at || undefined,
+      refundedBy: s.refunded_by || undefined,
+      refundedByUserId: s.refunded_by_user_id || undefined,
+      returnRecords: Array.isArray(s.return_records) ? s.return_records : undefined,
       createdAt: s.created_at,
     }));
 
@@ -374,30 +397,39 @@ export async function fetchAllDataFromSupabase(): Promise<SupabaseDataset | null
     let settings: CompanySettings | null = null;
     if (settingsRes.data && settingsRes.data.length > 0) {
       const s = settingsRes.data[0];
+      const parsedWarehouses =
+        Array.isArray(s.warehouses) && s.warehouses.length > 0
+          ? s.warehouses
+          : INITIAL_SETTINGS.warehouses;
       settings = {
-        companyName: s.company_name || 'Offnot Energy',
-        slogan: s.slogan || 'Clean Energy, Stronger Tomorrow',
-        location: s.location || 'Inside Tipper Garage, Dalute Road, Ibadan, Oyo State, Nigeria',
-        phone: s.phone || '07047053453',
-        email: s.email || 'offnotenergy@gmail.com',
+        companyName: s.company_name || INITIAL_SETTINGS.companyName,
+        slogan: s.slogan || INITIAL_SETTINGS.slogan,
+        location: s.location || INITIAL_SETTINGS.location,
+        phone: s.phone || INITIAL_SETTINGS.phone,
+        email: s.email || INITIAL_SETTINGS.email,
+        headOfficeAddress: s.head_office_address || INITIAL_SETTINGS.headOfficeAddress,
+        branchOfficeAddress: s.branch_office_address || INITIAL_SETTINGS.branchOfficeAddress,
+        dugbePhone: s.dugbe_phone || INITIAL_SETTINGS.dugbePhone,
+        dalutePhone: s.dalute_phone || INITIAL_SETTINGS.dalutePhone,
+        customerServicePhone: s.customer_service_phone || s.phone || INITIAL_SETTINGS.customerServicePhone,
+        facebookHandle: s.facebook_handle || INITIAL_SETTINGS.facebookHandle,
+        instagramHandle: s.instagram_handle || INITIAL_SETTINGS.instagramHandle,
+        tiktokHandle: s.tiktok_handle || INITIAL_SETTINGS.tiktokHandle,
         currencySymbol: s.currency_symbol || '₦',
         currencyCode: s.currency_code || 'NGN',
-        defaultVatRate: Number(s.default_vat_rate || 7.5),
+        defaultVatRate: Number(s.default_vat_rate ?? 7.5),
         enableTaxByDefault: Boolean(s.enable_tax_by_default),
-        minGrossMarginPercent: Number(s.min_gross_margin_percent || 12),
-        warehouses: [
-          'Main Showroom - Tipper Garage, Ibadan',
-          'Primary Warehouse - Tipper Garage, Ibadan',
-          'Dalute Road Retail Depot, Ibadan',
-        ],
-        receiptFooterMessage: s.receipt_footer_message || 'Thank you for choosing Offnot Energy! Clean Energy, Stronger Tomorrow.',
-        pwaAppTitle: s.pwa_app_title || 'Offnot Energy Management System',
-        pwaShortName: s.pwa_short_name || 'OffnotEnergy',
-        pwaLogoUrl: s.pwa_logo_url || '/pwa-512x512.png',
-        pwaThemeColor: s.pwa_theme_color || '#064e3b',
-        pwaBackgroundColor: s.pwa_background_color || '#0f172a',
+        minGrossMarginPercent: Number(s.min_gross_margin_percent ?? 12),
+        warehouses: parsedWarehouses,
+        receiptFooterMessage: s.receipt_footer_message || INITIAL_SETTINGS.receiptFooterMessage,
+        pwaAppTitle: s.pwa_app_title || INITIAL_SETTINGS.pwaAppTitle,
+        pwaShortName: s.pwa_short_name || INITIAL_SETTINGS.pwaShortName,
+        pwaLogoUrl: s.pwa_logo_url || INITIAL_SETTINGS.pwaLogoUrl,
+        pwaThemeColor: s.pwa_theme_color || INITIAL_SETTINGS.pwaThemeColor,
+        pwaBackgroundColor: s.pwa_background_color || INITIAL_SETTINGS.pwaBackgroundColor,
         enablePwaPrompt: s.enable_pwa_prompt !== false,
-        pwaPromptDelaySeconds: Number(s.pwa_prompt_delay_seconds || 2),
+        pwaPromptDelaySeconds: Number(s.pwa_prompt_delay_seconds ?? 2),
+        rolePermissions: s.role_permissions && typeof s.role_permissions === 'object' ? s.role_permissions : undefined,
       };
     }
 
@@ -682,8 +714,27 @@ export async function saveSaleToSupabase(sale: Sale, payments?: PaymentRecord[])
       branch_name: sale.branchName || null,
       notes: sale.notes || null,
       is_returned: Boolean(sale.returned),
+      original_grand_total: Number(sale.originalGrandTotal ?? sale.grandTotal ?? 0),
+      refund_amount: Number(sale.refundAmount || 0),
+      refund_reason: sale.refundReason || null,
+      refunded_at: sale.refundedAt || null,
+      refunded_by: sale.refundedBy || null,
+      refunded_by_user_id: sale.refundedByUserId || null,
+      return_records: Array.isArray(sale.returnRecords) ? sale.returnRecords : [],
       created_at: sale.createdAt || new Date().toISOString(),
       updated_at: new Date().toISOString(),
+    };
+
+    const stripExtendedSaleCols = (row: Record<string, any>) => {
+      const copy = { ...row };
+      delete copy.original_grand_total;
+      delete copy.refund_amount;
+      delete copy.refund_reason;
+      delete copy.refunded_at;
+      delete copy.refunded_by;
+      delete copy.refunded_by_user_id;
+      delete copy.return_records;
+      return copy;
     };
 
     // 3. Check if sale exists by id OR invoice_number to avoid unique constraint violations
@@ -701,18 +752,26 @@ export async function saveSaleToSupabase(sale: Sale, payments?: PaymentRecord[])
       // Ignore select error and attempt insert/upsert
     }
 
-    let saleErr: any = null;
-    if (existingRecordId) {
-      const { error } = await client.from('sales').update(saleRow).eq('id', existingRecordId);
-      saleErr = error;
-    } else {
-      const { error } = await client.from('sales').insert(saleRow);
-      saleErr = error;
-      // If invoice_number collided, fallback to update
-      if (saleErr && (saleErr.code === '23505' || saleErr.message?.includes('invoice_number'))) {
-        const { error: updErr } = await client.from('sales').update(saleRow).eq('invoice_number', sale.invoiceNumber);
-        saleErr = updErr;
+    const writeSaleRow = async (payload: Record<string, any>) => {
+      let errOut: any = null;
+      if (existingRecordId) {
+        const { error } = await client.from('sales').update(payload).eq('id', existingRecordId);
+        errOut = error;
+      } else {
+        const { error } = await client.from('sales').insert(payload);
+        errOut = error;
+        if (errOut && (errOut.code === '23505' || errOut.message?.includes('invoice_number'))) {
+          const { error: updErr } = await client.from('sales').update(payload).eq('invoice_number', sale.invoiceNumber);
+          errOut = updErr;
+        }
       }
+      return errOut;
+    };
+
+    let saleErr: any = await writeSaleRow(saleRow);
+
+    if (saleErr && isMissingColumnError(saleErr)) {
+      saleErr = await writeSaleRow(stripExtendedSaleCols(saleRow));
     }
 
     // Safety fallback: If any foreign key constraint still fails, strip customer_id & branch_id and retry
@@ -720,14 +779,18 @@ export async function saveSaleToSupabase(sale: Sale, payments?: PaymentRecord[])
       console.warn('Foreign key fallback: retrying sale insert with null customer_id & branch_id:', saleErr.message);
       saleRow.customer_id = null;
       saleRow.branch_id = null;
-      const { error: retryErr } = await client.from('sales').upsert(saleRow);
+      let { error: retryErr } = await client.from('sales').upsert(saleRow);
+      if (retryErr && isMissingColumnError(retryErr)) {
+        const res = await client.from('sales').upsert(stripExtendedSaleCols(saleRow));
+        retryErr = res.error;
+      }
       saleErr = retryErr;
     }
 
     if (saleErr) throw saleErr;
 
-    // Record individual payment rows if provided (safe, non-blocking)
-    if (payments && payments.length > 0) {
+    // Record individual payment rows only for new sales (prevents duplicates on reconciliation)
+    if (!existingRecordId && payments && payments.length > 0) {
       try {
         const paymentRows = payments.map(p => ({
           id: p.id,
@@ -738,14 +801,14 @@ export async function saveSaleToSupabase(sale: Sale, payments?: PaymentRecord[])
           recorded_by: p.recordedBy || 'Cashier',
           paid_at: p.paidAt || new Date().toISOString(),
         }));
-        await client.from('payments').insert(paymentRows);
+        await client.from('payments').upsert(paymentRows);
       } catch (payErr) {
         console.warn('Supabase payment insert warning (sale was saved):', payErr);
       }
     }
 
-    // Decrement current stock on products in Supabase (safe, non-blocking per item)
-    if (Array.isArray(sale.items)) {
+    // Decrement current stock ONLY when inserting a brand-new sale (never on update/reconciliation)
+    if (!existingRecordId && Array.isArray(sale.items)) {
       for (const item of sale.items) {
         try {
           const { data: prodData } = await client.from('products').select('current_stock').eq('id', item.productId).single();
@@ -902,28 +965,28 @@ export async function saveProjectToSupabase(project: InstallationProject): Promi
       id: project.id,
       project_code: project.projectCode,
       title: project.title,
-      customer_id: project.customerId,
+      customer_id: project.customerId || null,
       customer_name: project.customerName,
-      customer_phone: project.customerPhone,
+      customer_phone: project.customerPhone || null,
       site_address: project.siteAddress,
       capacity_description: project.capacityDescription,
       status: project.status,
-      lead_engineer_id: project.leadTechnicianId,
-      lead_engineer_name: project.leadTechnicianName,
-      assigned_technicians: project.teamMembers,
+      lead_technician_id: project.leadTechnicianId || null,
+      lead_technician_name: project.leadTechnicianName || 'Lead Solar Engineer',
+      team_members: Array.isArray(project.teamMembers) ? project.teamMembers : [],
       contract_amount: project.contractAmount,
-      total_material_cost: project.equipmentCost,
-      labor_cost: project.labourCost,
-      logistics_cost: project.transportCost,
+      equipment_cost: project.equipmentCost,
+      labour_cost: project.labourCost,
+      transport_cost: project.transportCost,
       other_expenses: project.otherExpenses,
       total_project_cost: project.totalProjectCost,
-      project_gross_profit: project.grossMargin,
-      materials: project.materials,
+      gross_margin: project.grossMargin,
+      materials: project.materials || [],
       start_date: project.startDate || null,
       target_completion_date: project.targetCompletionDate || null,
-      commissioning_date: project.actualCompletionDate || null,
-      warranty_period_months: project.warrantyPeriodMonths,
-      notes: project.technicalNotes || null,
+      actual_completion_date: project.actualCompletionDate || null,
+      warranty_period_months: project.warrantyPeriodMonths || 24,
+      technical_notes: project.technicalNotes || null,
       branch_id: project.branchId || null,
       updated_at: new Date().toISOString(),
     };
@@ -1034,7 +1097,7 @@ export async function saveStockMovementToSupabase(m: StockMovement): Promise<{ s
       created_at: m.timestamp || new Date().toISOString(),
     };
 
-    const { error } = await client.from('stock_movements').insert(row);
+    const { error } = await client.from('stock_movements').upsert(row);
     if (error) throw error;
     return { success: true };
   } catch (err: any) {
@@ -1047,7 +1110,7 @@ export async function saveSettingsToSupabase(settings: CompanySettings): Promise
   if (!client || !isSupabaseConfigured()) return { success: false, error: 'Supabase is not configured' };
 
   try {
-    const row = {
+    const baseRow = {
       id: 'cfg_offnot_main',
       company_name: settings.companyName,
       slogan: settings.slogan,
@@ -1070,7 +1133,25 @@ export async function saveSettingsToSupabase(settings: CompanySettings): Promise
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await client.from('company_settings').upsert(row);
+    const fullRow = {
+      ...baseRow,
+      head_office_address: settings.headOfficeAddress || null,
+      branch_office_address: settings.branchOfficeAddress || null,
+      dugbe_phone: settings.dugbePhone || null,
+      dalute_phone: settings.dalutePhone || null,
+      customer_service_phone: settings.customerServicePhone || settings.phone || null,
+      facebook_handle: settings.facebookHandle || null,
+      instagram_handle: settings.instagramHandle || null,
+      tiktok_handle: settings.tiktokHandle || null,
+      warehouses: Array.isArray(settings.warehouses) ? settings.warehouses : [],
+      role_permissions: settings.rolePermissions || null,
+    };
+
+    let { error } = await client.from('company_settings').upsert(fullRow);
+    if (error && isMissingColumnError(error)) {
+      const retry = await client.from('company_settings').upsert(baseRow);
+      error = retry.error;
+    }
     if (error) throw error;
     return { success: true };
   } catch (err: any) {
@@ -1186,49 +1267,98 @@ export async function deleteKpiFromSupabase(kpiId: string): Promise<{ success: b
 
 export async function saveSaleReturnToSupabase(
   sale: Sale,
-  returnedProduct: Product,
-  movement: StockMovement
+  returnedProducts: Product | Product[],
+  movements: StockMovement | StockMovement[],
+  customer?: Customer | null
 ): Promise<{ success: boolean; error?: string }> {
   const client = getSupabaseClient();
   if (!client || !isSupabaseConfigured()) return { success: false, error: 'Supabase is not configured' };
 
   try {
-    // 1. Update product with restored current_stock in Supabase
-    await client.from('products').update({
-      current_stock: returnedProduct.currentStock,
-      updated_at: new Date().toISOString(),
-    }).eq('id', returnedProduct.id);
+    const prodList = Array.isArray(returnedProducts) ? returnedProducts : [returnedProducts];
+    const moveList = Array.isArray(movements) ? movements : [movements];
 
-    // 2. Update sale record with is_returned = true, updated items, refund details
-    await client.from('sales').update({
-      is_returned: true,
+    // 1. Update products with restored current_stock in Supabase
+    for (const prod of prodList) {
+      const { error: prodErr } = await client
+        .from('products')
+        .update({
+          current_stock: prod.currentStock,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', prod.id);
+      if (prodErr) throw prodErr;
+    }
+
+    // 2. Update sale record with net grand_total, COGS, gross_profit, paid_amount, balance_due, items, and refund metadata
+    const baseSaleUpdate = {
+      is_returned: Boolean(sale.returned),
       items: sale.items,
-      balance_due: sale.balanceDue,
+      grand_total: Number(sale.grandTotal || 0),
+      paid_amount: Number(sale.paidAmount || 0),
+      balance_due: Number(sale.balanceDue || 0),
+      cost_of_goods_sold: Number(sale.costOfGoodsSold || 0),
+      gross_profit: Number(sale.grossProfit || 0),
+      payment_status: sale.paymentStatus || 'paid',
       notes: sale.notes || null,
-    }).eq('id', sale.id);
-
-    // 3. Record customer return movement in stock_movements
-    const movementRow = {
-      id: movement.id,
-      product_id: movement.productId,
-      product_name: movement.productName,
-      sku: movement.sku,
-      movement_type: 'customer_return',
-      quantity: movement.quantity,
-      previous_stock: movement.previousStock,
-      new_stock: movement.newStock,
-      unit_cost: movement.unitCost,
-      total_cost: movement.totalCost,
-      reference_id: movement.referenceId,
-      warehouse_location: movement.warehouseLocation,
-      branch_id: movement.branchId || null,
-      branch_name: movement.branchName || null,
-      reason: movement.reason,
-      performed_by_user_id: movement.performedByUserId || null,
-      performed_by_user_name: movement.performedByUserName,
-      timestamp: movement.timestamp,
+      updated_at: new Date().toISOString(),
     };
-    await client.from('stock_movements').insert([movementRow]);
+
+    const fullSaleUpdate = {
+      ...baseSaleUpdate,
+      original_grand_total: Number(sale.originalGrandTotal ?? sale.grandTotal ?? 0),
+      refund_amount: Number(sale.refundAmount || 0),
+      refund_reason: sale.refundReason || null,
+      refunded_at: sale.refundedAt || null,
+      refunded_by: sale.refundedBy || null,
+      refunded_by_user_id: sale.refundedByUserId || null,
+      return_records: Array.isArray(sale.returnRecords) ? sale.returnRecords : [],
+    };
+
+    let { error: saleUpdErr } = await client.from('sales').update(fullSaleUpdate).eq('id', sale.id);
+    if (saleUpdErr && isMissingColumnError(saleUpdErr)) {
+      const retry = await client.from('sales').update(baseSaleUpdate).eq('id', sale.id);
+      saleUpdErr = retry.error;
+    }
+    if (saleUpdErr) throw saleUpdErr;
+
+    // 3. Record customer return movements in stock_movements using exact schema columns (`type`, `created_at`)
+    if (moveList.length > 0) {
+      const movementRows = moveList.map(movement => ({
+        id: movement.id,
+        product_id: movement.productId,
+        product_name: movement.productName,
+        sku: movement.sku,
+        type: 'customer_return',
+        quantity: movement.quantity,
+        previous_stock: movement.previousStock,
+        new_stock: movement.newStock,
+        unit_cost: movement.unitCost,
+        total_cost: movement.totalCost,
+        reference_id: movement.referenceId,
+        warehouse_location: movement.warehouseLocation,
+        branch_id: movement.branchId || null,
+        branch_name: movement.branchName || null,
+        reason: movement.reason,
+        performed_by_user_id: movement.performedByUserId || null,
+        performed_by_user_name: movement.performedByUserName,
+        created_at: movement.timestamp || new Date().toISOString(),
+      }));
+      const { error: movErr } = await client.from('stock_movements').upsert(movementRows);
+      if (movErr) throw movErr;
+    }
+
+    // 4. Update customer totals if customer provided
+    if (customer && customer.id && customer.id !== 'walk_in' && customer.id !== 'cust_walk_in') {
+      await client
+        .from('customers')
+        .update({
+          total_purchases: Number(customer.totalPurchases || 0),
+          outstanding_balance: Number(customer.outstandingBalance || 0),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', customer.id);
+    }
 
     return { success: true };
   } catch (err: any) {

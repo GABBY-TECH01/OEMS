@@ -338,6 +338,7 @@ export interface Sale {
   notes?: string;
   returned?: boolean;
   refunded?: boolean;
+  originalGrandTotal?: number;
   refundAmount?: number;
   refundReason?: string;
   refundedAt?: string;
@@ -511,6 +512,16 @@ export interface CompanySettings {
   pwaBackgroundColor?: string;
   enablePwaPrompt?: boolean;
   pwaPromptDelaySeconds?: number;
+  // Extended Official Branch Contacts & Social Media Handles
+  headOfficeAddress?: string;
+  branchOfficeAddress?: string;
+  dugbePhone?: string;
+  dalutePhone?: string;
+  customerServicePhone?: string;
+  facebookHandle?: string;
+  instagramHandle?: string;
+  tiktokHandle?: string;
+  rolePermissions?: RolePermissionsMap;
 }
 
 export type KpiStatus = 'pending_acceptance' | 'active' | 'under_review' | 'completed' | 'exceeded';
@@ -571,7 +582,9 @@ export interface StaffKpi {
 
 export type OfflineSyncEntityType =
   | 'sale'
+  | 'sale_return'
   | 'customer'
+  | 'supplier'
   | 'expense'
   | 'product'
   | 'stock_movement'
@@ -581,7 +594,9 @@ export type OfflineSyncEntityType =
   | 'kpi'
   | 'kpi_log'
   | 'branch'
-  | 'staff';
+  | 'staff'
+  | 'settings'
+  | 'role_permissions';
 
 export interface OfflineSyncItem {
   id: string;
