@@ -36,7 +36,6 @@ export const StaffManagement: React.FC = () => {
     changeSuperadminPassword,
     toggleStaffStatus,
     deleteStaffAccount,
-    clearAllDemoStaff,
     branches,
     currentUser,
   } = useApp();
@@ -50,9 +49,8 @@ export const StaffManagement: React.FC = () => {
   const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // In-App Deletion and Batch Clearing Modals State (avoid window.confirm in iframe)
+  // In-App Deletion Modal State (avoid window.confirm in iframe)
   const [deleteTargetStaff, setDeleteTargetStaff] = useState<StaffAccount | null>(null);
-  const [showClearAllModal, setShowClearAllModal] = useState<boolean>(false);
 
   // Dedicated Password Reset Modal State
   const [resetModalStaff, setResetModalStaff] = useState<StaffAccount | null>(null);
@@ -337,18 +335,6 @@ export const StaffManagement: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-          {currentUser.role === 'super_admin' && staffAccounts.length > 1 && (
-            <button
-              type="button"
-              onClick={() => setShowClearAllModal(true)}
-              className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 shadow-2xs transition-all flex items-center gap-1.5"
-              title="Delete all pre-filled demo accounts so you can add your real staff"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-amber-700" />
-              <span>Clear All Demo Staff</span>
-            </button>
-          )}
-
           <button
             type="button"
             onClick={handleOpenCreate}
@@ -1031,76 +1017,6 @@ export const StaffManagement: React.FC = () => {
         </div>
       )}
 
-      {/* In-App Batch Clear All Demo Accounts Modal */}
-      {showClearAllModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
-                  <RefreshCw className="w-5 h-5 text-amber-700" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Clear All Demo Staff?</h3>
-                  <p className="text-xs text-slate-500">
-                    Prepare roster for real employee onboarding
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowClearAllModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-3">
-              <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-xs text-amber-900 space-y-1">
-                <p className="font-semibold text-amber-800">
-                  Clean Slate Provisioning
-                </p>
-                <p className="text-[11px] text-amber-800/90 leading-relaxed">
-                  This will remove all demo test accounts across all branches. <strong>Superadmin Francis Gabriel</strong> will remain untouched, allowing you to immediately add your real staff.
-                </p>
-              </div>
-
-              <p className="text-xs text-slate-600">
-                Number of demo accounts to clear: <span className="font-bold text-slate-900">{staffAccounts.length - 1} staff profiles</span>.
-              </p>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setShowClearAllModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const res = clearAllDemoStaff();
-                    if (res.success) {
-                      setFeedback({
-                        type: 'success',
-                        text: `Cleared ${res.count} demo staff accounts! The roster is now ready for your real staff members.`,
-                      });
-                    }
-                    setShowClearAllModal(false);
-                    setTimeout(() => setFeedback(null), 5000);
-                  }}
-                  className="px-5 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Yes, Clear All Demo Accounts</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

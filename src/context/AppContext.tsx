@@ -72,6 +72,7 @@ import {
   saveKpiDailyLogToSupabase,
   deleteKpiFromSupabase,
   saveSaleReturnToSupabase,
+  resetCleanZeroLedgerInSupabase,
 } from '../services/supabaseDataService';
 import { IndexedDbService, PendingTransaction } from '../services/indexedDbService';
 import { updatePWABrandingAndManifest } from '../utils/pwaUpdater';
@@ -165,8 +166,8 @@ interface AppContextType {
 
   // Zero Ledger & Global Actions
   refreshData: () => void;
-  resetDatabase: () => void;
-  resetToZeroLedger: () => void;
+  resetDatabase: () => Promise<{ success: boolean; syncedToCloud: boolean; error?: string }>;
+  resetToZeroLedger: () => Promise<{ success: boolean; syncedToCloud: boolean; error?: string }>;
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
 
@@ -191,7 +192,7 @@ interface AppContextType {
   processReturn: (saleId: string, productId: string, quantity: number, reason: string) => { success: boolean; error?: string; updatedSale?: Sale };
   processReturns: (
     saleId: string,
-    itemsToReturn: { productId: string; quantity: number }[],
+    itemsToReturn: { productId: string; quantity: number; sku?: string; itemIndex?: number }[],
     reason: string
   ) => { success: boolean; error?: string; updatedSale?: Sale; refundAmount?: number };
   applyGoLiveCatalogAndContacts: () => Promise<{ success: boolean; productCount: number; syncedToCloud: boolean }>;
@@ -462,6 +463,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const syncInFlightRef = useRef(false);
+  const isResettingRef = useRef(false);
+  const inFlightCloudWritesRef = useRef(0);
+
+  const trackCloudWrite = useCallback(<T,>(promise: Promise<T>): Promise<T> => {
+    inFlightCloudWritesRef.current += 1;
+    return promise.finally(() => {
+      inFlightCloudWritesRef.current = Math.max(0, inFlightCloudWritesRef.current - 1);
+    });
+  }, []);
 
   const syncWithSupabase = useCallback(async (): Promise<boolean> => {
     if (!isSupabaseConfigured()) {
@@ -469,7 +479,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     }
 
-    if (syncInFlightRef.current) {
+    if (syncInFlightRef.current || isResettingRef.current || inFlightCloudWritesRef.current > 0) {
       return false;
     }
     syncInFlightRef.current = true;
@@ -488,8 +498,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
+      if (isResettingRef.current || inFlightCloudWritesRef.current > 0) {
+        return false;
+      }
+
       const cloudData = await fetchAllDataFromSupabase();
       if (cloudData) {
+        if (isResettingRef.current) {
+          return false;
+        }
+
         if (cloudData.branches.length > 0) {
           setBranches(cloudData.branches);
           StorageService.saveBranches(cloudData.branches);
@@ -499,6 +517,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           StorageService.saveProducts(cloudData.products);
         }
 
+        // Gather only genuinely queued offline sale IDs (never resurrect sales that were deleted in Supabase / Zero Ledger)
+        const pendingLocalQueue = StorageService.getOfflineQueue();
+        const pendingIdbTx = await IndexedDbService.getPendingTransactions().catch(() => []);
+        const pendingSaleIds = new Set<string>();
+        pendingLocalQueue.forEach(q => {
+          if (q.entityType === 'sale' && q.data?.id) pendingSaleIds.add(q.data.id);
+        });
+        pendingIdbTx.forEach(tx => {
+          if (tx.id) pendingSaleIds.add(tx.id);
+          if (tx.saleData?.id) pendingSaleIds.add(tx.saleData.id);
+        });
+
         // Bidirectional Sales & Refund Reconciliation (strict ID match)
         const localSales = StorageService.getSales();
         const cloudSales = [...(cloudData.sales || [])];
@@ -507,16 +537,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           cloudSalesById.set(s.id, s);
         });
 
+        const sumReturnedUnits = (s: Sale) =>
+          s.items.reduce((sum, i) => sum + (i.returnedQuantity ?? (i.returned ? i.quantity : 0)), 0);
+
         const missingInCloud: Sale[] = [];
         const cloudNeedingRefundPush: Sale[] = [];
         for (const localSale of localSales) {
           const cloudMatch = cloudSalesById.get(localSale.id);
           if (!cloudMatch) {
-            missingInCloud.push(localSale);
+            if (pendingSaleIds.has(localSale.id)) {
+              missingInCloud.push(localSale);
+            }
           } else {
             const localReturns = localSale.returnRecords?.length || 0;
             const cloudReturns = cloudMatch.returnRecords?.length || 0;
-            if (localReturns > cloudReturns || (localSale.refundAmount || 0) > (cloudMatch.refundAmount || 0)) {
+            const localReturnedUnits = sumReturnedUnits(localSale);
+            const cloudReturnedUnits = sumReturnedUnits(cloudMatch);
+            if (
+              localReturns > cloudReturns ||
+              localReturnedUnits > cloudReturnedUnits ||
+              (localSale.refundAmount || 0) > (cloudMatch.refundAmount || 0)
+            ) {
               cloudNeedingRefundPush.push(localSale);
             }
           }
@@ -551,14 +592,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
 
-        if (mergedSales.length > 0) {
-          setSales(mergedSales);
-          StorageService.saveSales(mergedSales);
-        }
-        if (cloudData.stockMovements.length > 0) {
-          setStockMovements(cloudData.stockMovements);
-          StorageService.saveStockMovements(cloudData.stockMovements);
-        }
+        // Unconditionally mirror authoritative cloud transactional tables (so 0 rows clears stale local caches too)
+        setSales(mergedSales);
+        StorageService.saveSales(mergedSales);
+
+        setStockMovements(cloudData.stockMovements);
+        StorageService.saveStockMovements(cloudData.stockMovements);
+
         if (cloudData.customers.length > 0) {
           setCustomers(cloudData.customers);
           StorageService.saveCustomers(cloudData.customers);
@@ -567,22 +607,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setSuppliers(cloudData.suppliers);
           StorageService.saveSuppliers(cloudData.suppliers);
         }
-        if (cloudData.purchaseOrders.length > 0) {
-          setPurchaseOrders(cloudData.purchaseOrders);
-          StorageService.savePurchaseOrders(cloudData.purchaseOrders);
-        }
-        if (cloudData.quotations.length > 0) {
-          setQuotations(cloudData.quotations);
-          StorageService.saveQuotations(cloudData.quotations);
-        }
-        if (cloudData.projects.length > 0) {
-          setProjects(cloudData.projects);
-          StorageService.saveProjects(cloudData.projects);
-        }
-        if (cloudData.expenses.length > 0) {
-          setExpenses(cloudData.expenses);
-          StorageService.saveExpenses(cloudData.expenses);
-        }
+
+        setPurchaseOrders(cloudData.purchaseOrders);
+        StorageService.savePurchaseOrders(cloudData.purchaseOrders);
+
+        setQuotations(cloudData.quotations);
+        StorageService.saveQuotations(cloudData.quotations);
+
+        setProjects(cloudData.projects);
+        StorageService.saveProjects(cloudData.projects);
+
+        setExpenses(cloudData.expenses);
+        StorageService.saveExpenses(cloudData.expenses);
+
         if (cloudData.staffAccounts.length > 0) {
           setStaffAccounts(cloudData.staffAccounts);
           StorageService.saveStaffAccounts(cloudData.staffAccounts);
@@ -607,10 +644,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setNotifications(cloudData.notifications);
           StorageService.saveNotifications(cloudData.notifications);
         }
-        if (cloudData.staffKpis && cloudData.staffKpis.length > 0) {
-          setStaffKpis(cloudData.staffKpis);
-          StorageService.saveStaffKpis(cloudData.staffKpis);
-        }
+
+        setStaffKpis(cloudData.staffKpis || []);
+        StorageService.saveStaffKpis(cloudData.staffKpis || []);
 
         setIsSupabaseConnected(true);
         const timeNow = new Date().toLocaleTimeString();
@@ -735,17 +771,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRolePermissions(StorageService.getRolePermissions());
     setSettings(StorageService.getSettings());
     setUsers(StorageService.getUsers());
-    
+
     const sess = StorageService.getAuthSession();
     if (sess) {
       setCurrentUserState(sess.user);
     } else {
       setCurrentUserState(StorageService.getCurrentUser());
-    }
-
-    // Also trigger cloud sync if connected
-    if (isSupabaseConfigured()) {
-      syncWithSupabase();
     }
 
     setProducts(StorageService.getProducts());
@@ -762,14 +793,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStaffKpis(StorageService.getStaffKpis());
   };
 
-  const resetToZeroLedger = () => {
-    StorageService.resetToZeroLedger();
-    refreshData();
+  const resetToZeroLedger = async (): Promise<{ success: boolean; syncedToCloud: boolean; error?: string }> => {
+    isResettingRef.current = true;
+    try {
+      await IndexedDbService.clearAll();
+      StorageService.clearOfflineQueue();
+      setPendingTransactions([]);
+      setOfflineQueueCount(0);
+
+      StorageService.resetToZeroLedger(currentUser);
+      refreshData();
+
+      if (navigator.onLine && isSupabaseConfigured()) {
+        const cleanNotif = StorageService.getNotifications()[0];
+        const cleanLog = StorageService.getAuditLogs()[0];
+        const cloudRes = await resetCleanZeroLedgerInSupabase(cleanNotif, cleanLog);
+        if (cloudRes.success) {
+          setSupabaseSyncTime(new Date().toLocaleTimeString());
+          setIsSupabaseConnected(true);
+        }
+        return {
+          success: true,
+          syncedToCloud: cloudRes.success,
+          error: cloudRes.error,
+        };
+      }
+
+      return { success: true, syncedToCloud: false };
+    } finally {
+      isResettingRef.current = false;
+    }
   };
 
-  const resetDatabase = () => {
-    StorageService.resetToZeroLedger();
-    refreshData();
+  const resetDatabase = async (): Promise<{ success: boolean; syncedToCloud: boolean; error?: string }> => {
+    return resetToZeroLedger();
   };
 
   // Cross-Store Isolation & Branch Lock
@@ -2132,22 +2189,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             .finally(() => updateOfflineQueueCount());
           StorageService.enqueueOfflineItem('sale', 'create', res.sale);
         } else {
-          saveSaleToSupabase(res.sale)
-            .then(syncRes => {
-              if (!syncRes.success) {
+          trackCloudWrite(
+            saveSaleToSupabase(res.sale)
+              .then(syncRes => {
+                if (!syncRes.success) {
+                  IndexedDbService.recordPendingTransaction(res.sale!)
+                    .catch(e => console.warn('IndexedDB record error:', e))
+                    .finally(() => updateOfflineQueueCount());
+                  StorageService.enqueueOfflineItem('sale', 'create', res.sale);
+                } else {
+                  setSupabaseSyncTime(new Date().toLocaleTimeString());
+                }
+              })
+              .catch(err => {
+                console.warn('saveSaleToSupabase error, queued offline:', err);
                 IndexedDbService.recordPendingTransaction(res.sale!)
                   .catch(e => console.warn('IndexedDB record error:', e))
                   .finally(() => updateOfflineQueueCount());
                 StorageService.enqueueOfflineItem('sale', 'create', res.sale);
-              }
-            })
-            .catch(err => {
-              console.warn('saveSaleToSupabase error, queued offline:', err);
-              IndexedDbService.recordPendingTransaction(res.sale!)
-                .catch(e => console.warn('IndexedDB record error:', e))
-                .finally(() => updateOfflineQueueCount());
-              StorageService.enqueueOfflineItem('sale', 'create', res.sale);
-            });
+              })
+          );
         }
         syncSalesToStaffKpis(res.sale, StorageService.getSales());
       }
@@ -2158,7 +2219,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const processReturns = (
     saleId: string,
-    itemsToReturn: { productId: string; quantity: number }[],
+    itemsToReturn: { productId: string; quantity: number; sku?: string; itemIndex?: number }[],
     reason: string
   ) => {
     const res = StorageService.processCustomerReturns(saleId, itemsToReturn, reason, currentUser);
@@ -2173,20 +2234,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!navigator.onLine || !isSupabaseConfigured()) {
         enqueueOfflineSafely('sale_return', 'update', payload);
       } else {
-        saveSaleReturnToSupabase(
-          res.updatedSale,
-          res.updatedProducts || [],
-          res.returnMovements || [],
-          res.updatedCustomer
-        )
-          .then(syncRes => {
-            if (!syncRes.success) {
+        trackCloudWrite(
+          saveSaleReturnToSupabase(
+            res.updatedSale,
+            res.updatedProducts || [],
+            res.returnMovements || [],
+            res.updatedCustomer
+          )
+            .then(syncRes => {
+              if (!syncRes.success) {
+                enqueueOfflineSafely('sale_return', 'update', payload);
+              } else {
+                setSupabaseSyncTime(new Date().toLocaleTimeString());
+              }
+            })
+            .catch(() => {
               enqueueOfflineSafely('sale_return', 'update', payload);
-            }
-          })
-          .catch(() => {
-            enqueueOfflineSafely('sale_return', 'update', payload);
-          });
+            })
+        );
       }
       syncSalesToStaffKpis(res.updatedSale, StorageService.getSales());
       refreshData();

@@ -33,16 +33,19 @@ export const PrintableReceipt: React.FC<PrintableReceiptProps> = ({
 
   const logoSrc = settings.pwaLogoUrl || BRAND_LOGO_URL;
 
-  // Check if this sale has returns or refunds
+  // Check if this sale has partial or full returns/refunds
+  const totalSoldQty = sale.items.reduce((acc, i) => acc + i.quantity, 0);
+  const totalReturnedQty =
+    sale.items.reduce((acc, i) => acc + (i.returnedQuantity ?? (i.returned ? i.quantity : 0)), 0) ||
+    (sale.returnRecords ? sale.returnRecords.reduce((acc, r) => acc + r.quantity, 0) : 0);
+
   const isRefunded = Boolean(
     sale.returned ||
     sale.refunded ||
-    (sale.returnRecords && sale.returnRecords.length > 0) ||
-    sale.items.some(i => (i.returnedQuantity || 0) > 0)
+    totalReturnedQty > 0 ||
+    (sale.returnRecords && sale.returnRecords.length > 0)
   );
-
-  const totalReturnedQty = sale.items.reduce((acc, i) => acc + (i.returnedQuantity || 0), 0) ||
-    (sale.returnRecords ? sale.returnRecords.reduce((acc, r) => acc + r.quantity, 0) : 0);
+  const isPartialRefund = isRefunded && totalReturnedQty < totalSoldQty;
 
   const totalRefundAmount = sale.refundAmount ||
     (sale.returnRecords ? sale.returnRecords.reduce((acc, r) => acc + r.refundAmount, 0) : 0);
@@ -226,10 +229,16 @@ export const PrintableReceipt: React.FC<PrintableReceiptProps> = ({
             <div className="mb-4 p-3 bg-rose-50 border-2 border-dashed border-rose-500 rounded-lg text-center">
               <div className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-600 text-white text-[11px] font-black uppercase tracking-wider mb-1">
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>Official Refund & Return Receipt</span>
+                <span>
+                  {isPartialRefund
+                    ? 'Partial Return & Refund Receipt'
+                    : 'Official Refund & Return Receipt'}
+                </span>
               </div>
               <p className="text-[11px] font-extrabold text-rose-900 uppercase tracking-tight">
-                Stock Restored to Inventory · No Shortage
+                {isPartialRefund
+                  ? `${totalReturnedQty} of ${totalSoldQty} Units Restocked · Remaining Active`
+                  : 'Stock Restored to Inventory · No Shortage'}
               </p>
               <p className="text-[10px] text-rose-700 mt-0.5">
                 Returned items verified & re-inventoried into {sale.warehouseLocation || 'store shelf'}

@@ -1612,26 +1612,107 @@ export const StorageService = {
     }
   },
 
-  // Reset strictly to Clean Zero Ledger
-  resetToZeroLedger(): void {
-    setStorage(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
-    setStorage(STORAGE_KEYS.BRANCHES, INITIAL_BRANCHES);
-    setStorage(STORAGE_KEYS.ACTIVE_BRANCH_ID, 'all');
-    setStorage(STORAGE_KEYS.USERS, INITIAL_USERS);
-    setStorage(STORAGE_KEYS.STAFF_ACCOUNTS, INITIAL_STAFF_ACCOUNTS);
-    setStorage(STORAGE_KEYS.CURRENT_USER_ID, INITIAL_USERS[0].id);
-    setStorage(STORAGE_KEYS.SUPPLIERS, INITIAL_SUPPLIERS);
-    setStorage(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
-    setStorage(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
+  // Reset strictly to Clean Zero Ledger while preserving real staff accounts, company logo/settings, branches, and product catalog (with 0 stock qty)
+  resetToZeroLedger(performedBy?: User): void {
+    const now = new Date().toISOString();
+
+    // Preserve existing configured settings (including uploaded logo & dual contacts), branches, and permissions
+    const existingSettings = this.getSettings();
+    const existingBranches = this.getBranches();
+    const existingRolePermissions = this.getRolePermissions();
+
+    // Preserve ALL real staff accounts & users (including custom passwords & branch assignments)
+    const existingUsers = this.getUsers();
+    const existingStaffAccounts = this.getStaffAccounts();
+    const activeUserId = getStorage<string>(STORAGE_KEYS.CURRENT_USER_ID, existingUsers[0]?.id || 'usr_super_admin');
+
+    // Preserve all catalog & custom products, setting every product's quantity to 0
+    const existingProducts = this.getProducts();
+    const zeroedProducts: Product[] = (existingProducts.length > 0 ? existingProducts : INITIAL_PRODUCTS).map(p => ({
+      ...p,
+      currentStock: 0,
+      updatedAt: now,
+    }));
+
+    // Preserve customer directory, resetting transactional balances to 0
+    const existingCustomers = this.getCustomers();
+    const zeroedCustomers: Customer[] = (existingCustomers.length > 0 ? existingCustomers : INITIAL_CUSTOMERS).map(c => ({
+      ...c,
+      totalPurchases: 0,
+      outstandingBalance: 0,
+      lastPurchaseDate: undefined,
+    }));
+
+    // Preserve supplier directory, resetting payables to 0
+    const existingSuppliers = this.getSuppliers();
+    const zeroedSuppliers: Supplier[] = (existingSuppliers.length > 0 ? existingSuppliers : INITIAL_SUPPLIERS).map(s => ({
+      ...s,
+      outstandingBalance: 0,
+    }));
+
+    // Preserve assigned KPI targets, resetting actual performance & daily logs to 0
+    const existingKpis = this.getStaffKpis();
+    const zeroedKpis: StaffKpi[] = existingKpis.map(k => ({
+      ...k,
+      actualSalesAchieved: 0,
+      actualGrossProfit: 0,
+      quotationsCreated: 0,
+      quotationsConverted: 0,
+      installationsCompleted: 0,
+      dailyLogs: [],
+      selfAssessmentNotes: '',
+      managerReviewNotes: '',
+      performanceRating: 'Pending',
+      status: k.acceptedAt ? 'active' : 'pending_acceptance',
+    }));
+
+    const actor = performedBy || existingUsers.find(u => u.id === activeUserId) || existingUsers[0] || INITIAL_USERS[0];
+
+    const cleanNotifications: AppNotification[] = [
+      {
+        id: `notif_zero_ledger_${Date.now()}`,
+        title: 'Clean Zero-Ledger Active',
+        message: 'All sales, transactions, and inventory stock quantities have been reset to ₦0.00 / 0 units. Staff accounts, branches, and product catalog remain intact.',
+        type: 'info',
+        read: false,
+        linkModule: 'dashboard',
+        createdAt: now,
+      },
+    ];
+
+    const cleanAuditLogs: AuditLog[] = [
+      {
+        id: `aud_zero_${Date.now()}`,
+        userId: actor.id,
+        userName: actor.name,
+        userRole: actor.role,
+        action: 'SYSTEM_ZERO_LEDGER_RESET',
+        module: 'settings',
+        details: 'Reset all sales invoices, purchase orders, expenses, and product quantities to strict 0 while preserving staff accounts, branches, settings, and product catalog.',
+        timestamp: now,
+      },
+    ];
+
+    setStorage(STORAGE_KEYS.SETTINGS, existingSettings);
+    setStorage(STORAGE_KEYS.BRANCHES, existingBranches.length > 0 ? existingBranches : INITIAL_BRANCHES);
+    setStorage(STORAGE_KEYS.ACTIVE_BRANCH_ID, actor.canAccessAllBranches || actor.role === 'super_admin' || actor.role === 'ceo' ? 'all' : (actor.branchId || 'all'));
+    setStorage(STORAGE_KEYS.USERS, existingUsers.length > 0 ? existingUsers : INITIAL_USERS);
+    setStorage(STORAGE_KEYS.STAFF_ACCOUNTS, existingStaffAccounts.length > 0 ? existingStaffAccounts : INITIAL_STAFF_ACCOUNTS);
+    setStorage(STORAGE_KEYS.CURRENT_USER_ID, activeUserId);
+    setStorage(STORAGE_KEYS.ROLE_PERMISSIONS, existingRolePermissions);
+    setStorage(STORAGE_KEYS.SUPPLIERS, zeroedSuppliers);
+    setStorage(STORAGE_KEYS.PRODUCTS, zeroedProducts);
+    setStorage(STORAGE_KEYS.CUSTOMERS, zeroedCustomers);
+    setStorage(STORAGE_KEYS.STAFF_KPIS, zeroedKpis);
     setStorage(STORAGE_KEYS.PROJECTS, []);
     setStorage(STORAGE_KEYS.EXPENSES, []);
     setStorage(STORAGE_KEYS.SALES, []);
     setStorage(STORAGE_KEYS.MOVEMENTS, []);
     setStorage(STORAGE_KEYS.PURCHASE_ORDERS, []);
     setStorage(STORAGE_KEYS.QUOTATIONS, []);
-    setStorage(STORAGE_KEYS.NOTIFICATIONS, INITIAL_NOTIFICATIONS);
-    setStorage(STORAGE_KEYS.AUDIT_LOGS, INITIAL_AUDIT_LOGS);
-    setStorage(STORAGE_KEYS.ROLE_PERMISSIONS, INITIAL_ROLE_PERMISSIONS);
+    setStorage(STORAGE_KEYS.NOTIFICATIONS, cleanNotifications);
+    setStorage(STORAGE_KEYS.AUDIT_LOGS, cleanAuditLogs);
+    this.clearOfflineQueue();
   },
 
   // Role Permissions Matrix
@@ -2427,7 +2508,7 @@ export const StorageService = {
   // 6. Record Multi-Item or Full Customer Return & Refund with Net Revenue & Stock Reversal
   processCustomerReturns(
     saleId: string,
-    itemsToReturn: { productId: string; quantity: number }[],
+    itemsToReturn: { productId: string; quantity: number; sku?: string; itemIndex?: number }[],
     reason: string,
     user: User
   ): {
@@ -2451,16 +2532,38 @@ export const StorageService = {
     const now = new Date().toISOString();
     const batchSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
 
+    const resolveSaleItem = (req: { productId: string; sku?: string; itemIndex?: number }) => {
+      if (
+        req.itemIndex !== undefined &&
+        req.itemIndex >= 0 &&
+        req.itemIndex < sale.items.length &&
+        (sale.items[req.itemIndex].productId === req.productId ||
+          (req.sku && sale.items[req.itemIndex].sku === req.sku))
+      ) {
+        return sale.items[req.itemIndex];
+      }
+      return sale.items.find(i => {
+        const alreadyReturned = i.returnedQuantity ?? (i.returned ? i.quantity : 0);
+        const remaining = i.quantity - alreadyReturned;
+        return remaining > 0 && (i.productId === req.productId || (req.sku && i.sku === req.sku));
+      }) || sale.items.find(i => i.productId === req.productId || (req.sku && i.sku === req.sku));
+    };
+
+    const resolveCatalogProduct = (req: { productId: string; sku?: string }, itemSku?: string) => {
+      const targetSku = req.sku || itemSku;
+      return products.find(p => p.id === req.productId || (targetSku && p.sku === targetSku));
+    };
+
     // Validate all requested return items before mutating anything
     for (const req of itemsToReturn) {
       if (req.quantity <= 0) {
         return { success: false, error: 'Return quantity must be greater than zero.' };
       }
-      const item = sale.items.find(i => i.productId === req.productId);
+      const item = resolveSaleItem(req);
       if (!item) {
         return { success: false, error: `Product ${req.productId} was not part of this sale.` };
       }
-      const currentReturned = item.returnedQuantity || 0;
+      const currentReturned = item.returnedQuantity ?? (item.returned ? item.quantity : 0);
       const availableToReturn = item.quantity - currentReturned;
       if (req.quantity > availableToReturn) {
         return {
@@ -2468,14 +2571,14 @@ export const StorageService = {
           error: `Cannot return ${req.quantity}x "${item.productName}". Eligible remaining: ${availableToReturn}.`,
         };
       }
-      const prod = products.find(p => p.id === req.productId);
+      const prod = resolveCatalogProduct(req, item.sku);
       if (!prod) {
         return { success: false, error: `Product "${item.productName}" not found in inventory catalog.` };
       }
     }
 
     // Preserve original sale total prior to first refund
-    if (sale.originalGrandTotal === undefined) {
+    if (sale.originalGrandTotal === undefined || sale.originalGrandTotal === 0) {
       sale.originalGrandTotal = sale.grandTotal + (sale.refundAmount || 0);
     }
 
@@ -2489,30 +2592,30 @@ export const StorageService = {
     let totalBatchCogsReversed = 0;
 
     for (const req of itemsToReturn) {
-      const item = sale.items.find(i => i.productId === req.productId)!;
-      const prod = products.find(p => p.id === req.productId)!;
+      const item = resolveSaleItem(req)!;
+      const prod = resolveCatalogProduct(req, item.sku)!;
 
       const previousStock = prod.currentStock;
       const newStock = previousStock + req.quantity;
       prod.currentStock = newStock;
       prod.updatedAt = now;
-      updatedProducts.push(prod);
+      if (!updatedProducts.some(up => up.id === prod.id)) {
+        updatedProducts.push(prod);
+      }
 
-      const currentReturned = item.returnedQuantity || 0;
+      const currentReturned = item.returnedQuantity ?? (item.returned ? item.quantity : 0);
       const discountPortion = item.quantity > 0 ? ((item.discount || 0) / item.quantity) * req.quantity : 0;
-      const itemRefundAmount = Math.max(0, (item.unitPrice * req.quantity) - discountPortion);
-      const itemCogsReversed = (item.unitCost || prod.purchaseCost || 0) * req.quantity;
+      const itemRefundAmount = Math.round(Math.max(0, (item.unitPrice * req.quantity) - discountPortion) * 100) / 100;
+      const itemCogsReversed = Math.round(((item.unitCost || prod.purchaseCost || 0) * req.quantity) * 100) / 100;
 
       totalBatchRefund += itemRefundAmount;
       totalBatchCogsReversed += itemCogsReversed;
 
       item.returnedQuantity = currentReturned + req.quantity;
-      if (item.returnedQuantity >= item.quantity) {
-        item.returned = true;
-      }
+      item.returned = item.returnedQuantity >= item.quantity;
 
       const movement: StockMovement = {
-        id: `mov_ret_${Date.now()}_${batchSuffix}_${prod.sku}`,
+        id: `mov_ret_${Date.now()}_${batchSuffix}_${prod.sku}_${Math.random().toString(36).substring(2, 5)}`,
         productId: prod.id,
         productName: prod.name,
         sku: prod.sku,
@@ -2549,35 +2652,52 @@ export const StorageService = {
       sale.returnRecords.unshift(returnRecord);
     }
 
+    // Check if ALL items on the receipt have now been refunded (e.g., 4 returned earlier + 5th returned now)
+    const allItemsFullyReturned = sale.items.every(
+      i => (i.returnedQuantity ?? (i.returned ? i.quantity : 0)) >= i.quantity
+    );
+
     // Deduct refunded amount from active net daily/period revenue & profit
     sale.returned = true;
     sale.refunded = true;
-    sale.refundAmount = (sale.refundAmount || 0) + totalBatchRefund;
     sale.refundReason = reason;
     sale.refundedAt = now;
     sale.refundedBy = user.name;
     sale.refundedByUserId = user.id;
 
-    sale.grandTotal = Math.max(0, sale.grandTotal - totalBatchRefund);
-    sale.costOfGoodsSold = Math.max(0, sale.costOfGoodsSold - totalBatchCogsReversed);
-    sale.grossProfit = sale.grandTotal - sale.costOfGoodsSold;
-
     let balReduction = 0;
-    if (sale.balanceDue > 0) {
-      balReduction = Math.min(sale.balanceDue, totalBatchRefund);
-      sale.balanceDue = Math.max(0, sale.balanceDue - balReduction);
-      const cashRefunded = Math.max(0, totalBatchRefund - balReduction);
-      sale.paidAmount = Math.max(0, sale.paidAmount - cashRefunded);
+    if (allItemsFullyReturned) {
+      totalBatchRefund = Math.max(0, sale.grandTotal);
+      sale.refundAmount = sale.originalGrandTotal ?? Math.round(((sale.refundAmount || 0) + totalBatchRefund) * 100) / 100;
+      sale.grandTotal = 0;
+      sale.costOfGoodsSold = 0;
+      sale.grossProfit = 0;
+      balReduction = sale.balanceDue;
+      sale.balanceDue = 0;
+      sale.paidAmount = 0;
+      sale.paymentStatus = 'paid';
     } else {
-      sale.paidAmount = Math.max(0, sale.paidAmount - totalBatchRefund);
-    }
+      sale.refundAmount = Math.round(((sale.refundAmount || 0) + totalBatchRefund) * 100) / 100;
+      sale.grandTotal = Math.round(Math.max(0, sale.grandTotal - totalBatchRefund) * 100) / 100;
+      sale.costOfGoodsSold = Math.round(Math.max(0, sale.costOfGoodsSold - totalBatchCogsReversed) * 100) / 100;
+      sale.grossProfit = Math.round((sale.grandTotal - sale.costOfGoodsSold) * 100) / 100;
 
-    sale.paymentStatus =
-      sale.grandTotal === 0 || sale.balanceDue === 0
-        ? 'paid'
-        : sale.paidAmount > 0
-        ? 'partial'
-        : 'unpaid';
+      if (sale.balanceDue > 0) {
+        balReduction = Math.min(sale.balanceDue, totalBatchRefund);
+        sale.balanceDue = Math.round(Math.max(0, sale.balanceDue - balReduction) * 100) / 100;
+        const cashRefunded = Math.max(0, totalBatchRefund - balReduction);
+        sale.paidAmount = Math.round(Math.max(0, sale.paidAmount - cashRefunded) * 100) / 100;
+      } else {
+        sale.paidAmount = Math.round(Math.max(0, sale.paidAmount - totalBatchRefund) * 100) / 100;
+      }
+
+      sale.paymentStatus =
+        sale.grandTotal === 0 || sale.balanceDue === 0
+          ? 'paid'
+          : sale.paidAmount > 0
+          ? 'partial'
+          : 'unpaid';
+    }
 
     // Update customer ledger balance
     let updatedCustomer: Customer | undefined;

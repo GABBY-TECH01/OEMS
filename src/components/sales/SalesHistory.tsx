@@ -75,14 +75,33 @@ export const SalesHistory: React.FC = () => {
     exportToCSV(`offnot_sales_invoices_${new Date().toISOString().slice(0, 10)}`, rows);
   };
 
+  const getReturnedQty = (item: Sale['items'][number]) =>
+    item.returnedQuantity ?? (item.returned ? item.quantity : 0);
+
+  const getSaleReturnStats = (sale: Sale) => {
+    const totalSoldUnits = sale.items.reduce((s, i) => s + i.quantity, 0);
+    const totalReturnedUnits = sale.items.reduce((s, i) => s + getReturnedQty(i), 0);
+    const remainingUnits = Math.max(0, totalSoldUnits - totalReturnedUnits);
+    return {
+      totalSoldUnits,
+      totalReturnedUnits,
+      remainingUnits,
+      hasRefundableItems: remainingUnits > 0,
+      isPartialReturn: totalReturnedUnits > 0 && remainingUnits > 0,
+      isFullyReturned: totalReturnedUnits > 0 && remainingUnits === 0,
+    };
+  };
+
   const openReturnModal = (sale: Sale) => {
-    const eligibleItems = sale.items.filter(i => i.quantity - (i.returnedQuantity || 0) > 0);
+    const eligibleIndices = sale.items
+      .map((i, idx) => ({ item: i, idx, eligible: Math.max(0, i.quantity - getReturnedQty(i)) }))
+      .filter(entry => entry.eligible > 0);
     const initialSelections: Record<string, ReturnSelectionState> = {};
 
-    sale.items.forEach(item => {
-      const eligible = Math.max(0, item.quantity - (item.returnedQuantity || 0));
-      initialSelections[item.productId] = {
-        selected: eligibleItems.length === 1 && eligible > 0,
+    sale.items.forEach((item, idx) => {
+      const eligible = Math.max(0, item.quantity - getReturnedQty(item));
+      initialSelections[String(idx)] = {
+        selected: eligibleIndices.length === 1 && eligible > 0,
         quantity: eligible > 0 ? eligible : 0,
       };
     });
@@ -94,24 +113,30 @@ export const SalesHistory: React.FC = () => {
     setShowReturnModal(true);
   };
 
-  const eligibleItemsForModal = useMemo(() => {
+  const eligibleEntriesForModal = useMemo(() => {
     if (!returningSale) return [];
-    return returningSale.items.filter(i => i.quantity - (i.returnedQuantity || 0) > 0);
+    return returningSale.items
+      .map((item, idx) => ({
+        item,
+        idx,
+        key: String(idx),
+        eligible: Math.max(0, item.quantity - getReturnedQty(item)),
+      }))
+      .filter(entry => entry.eligible > 0);
   }, [returningSale]);
 
   const allEligibleSelected = useMemo(() => {
-    if (eligibleItemsForModal.length === 0) return false;
-    return eligibleItemsForModal.every(i => returnSelections[i.productId]?.selected);
-  }, [eligibleItemsForModal, returnSelections]);
+    if (eligibleEntriesForModal.length === 0) return false;
+    return eligibleEntriesForModal.every(entry => returnSelections[entry.key]?.selected);
+  }, [eligibleEntriesForModal, returnSelections]);
 
   const handleToggleSelectAll = () => {
     const nextSelectAll = !allEligibleSelected;
     setReturnSelections(prev => {
       const updated: Record<string, ReturnSelectionState> = { ...prev };
-      eligibleItemsForModal.forEach(item => {
-        const eligible = Math.max(0, item.quantity - (item.returnedQuantity || 0));
-        const currentQty = prev[item.productId]?.quantity || eligible;
-        updated[item.productId] = {
+      eligibleEntriesForModal.forEach(({ key, eligible }) => {
+        const currentQty = prev[key]?.quantity || eligible;
+        updated[key] = {
           selected: nextSelectAll && eligible > 0,
           quantity: Math.max(1, Math.min(currentQty, eligible)),
         };
@@ -120,13 +145,13 @@ export const SalesHistory: React.FC = () => {
     });
   };
 
-  const toggleItemSelection = (productId: string, eligibleQty: number) => {
+  const toggleItemSelection = (rowKey: string, eligibleQty: number) => {
     if (eligibleQty <= 0) return;
     setReturnSelections(prev => {
-      const cur = prev[productId] || { selected: false, quantity: eligibleQty };
+      const cur = prev[rowKey] || { selected: false, quantity: eligibleQty };
       return {
         ...prev,
-        [productId]: {
+        [rowKey]: {
           selected: !cur.selected,
           quantity: cur.quantity > 0 ? Math.min(cur.quantity, eligibleQty) : eligibleQty,
         },
@@ -134,11 +159,11 @@ export const SalesHistory: React.FC = () => {
     });
   };
 
-  const updateItemReturnQty = (productId: string, nextQty: number, eligibleQty: number) => {
+  const updateItemReturnQty = (rowKey: string, nextQty: number, eligibleQty: number) => {
     const clamped = Math.max(1, Math.min(nextQty, eligibleQty));
     setReturnSelections(prev => ({
       ...prev,
-      [productId]: {
+      [rowKey]: {
         selected: true,
         quantity: clamped,
       },
@@ -151,15 +176,18 @@ export const SalesHistory: React.FC = () => {
     let totalUnits = 0;
     let totalRefundAmount = 0;
 
-    returningSale.items.forEach(item => {
-      const sel = returnSelections[item.productId];
-      const eligible = Math.max(0, item.quantity - (item.returnedQuantity || 0));
+    returningSale.items.forEach((item, idx) => {
+      const sel = returnSelections[String(idx)];
+      const eligible = Math.max(0, item.quantity - getReturnedQty(item));
       if (sel?.selected && eligible > 0) {
         const qty = Math.max(1, Math.min(sel.quantity, eligible));
-        const unitNet = item.quantity > 0 ? (item.subtotal - (item.discount || 0)) / item.quantity : item.unitPrice;
+        const unitNet =
+          item.quantity > 0
+            ? Math.max(0, (item.unitPrice * item.quantity - (item.discount || 0)) / item.quantity)
+            : item.unitPrice;
         itemsCount += 1;
         totalUnits += qty;
-        totalRefundAmount += Math.max(0, unitNet * qty);
+        totalRefundAmount += Math.round(Math.max(0, unitNet * qty) * 100) / 100;
       }
     });
 
@@ -172,17 +200,14 @@ export const SalesHistory: React.FC = () => {
     if (!returningSale) return;
 
     const selectedList = returningSale.items
-      .filter(item => {
-        const eligible = Math.max(0, item.quantity - (item.returnedQuantity || 0));
-        return eligible > 0 && returnSelections[item.productId]?.selected;
-      })
-      .map(item => {
-        const eligible = Math.max(0, item.quantity - (item.returnedQuantity || 0));
-        return {
-          productId: item.productId,
-          quantity: Math.max(1, Math.min(returnSelections[item.productId]?.quantity || eligible, eligible)),
-        };
-      });
+      .map((item, idx) => ({ item, idx, eligible: Math.max(0, item.quantity - getReturnedQty(item)) }))
+      .filter(({ idx, eligible }) => eligible > 0 && returnSelections[String(idx)]?.selected)
+      .map(({ item, idx, eligible }) => ({
+        productId: item.productId,
+        sku: item.sku,
+        itemIndex: idx,
+        quantity: Math.max(1, Math.min(returnSelections[String(idx)]?.quantity || eligible, eligible)),
+      }));
 
     if (selectedList.length === 0) {
       setReturnError('Please select at least one product to refund & restock.');
@@ -265,7 +290,7 @@ export const SalesHistory: React.FC = () => {
           </div>
         ) : (
           filteredSales.map(sale => {
-            const hasRefundableItems = sale.items.some(i => i.quantity - (i.returnedQuantity || 0) > 0);
+            const { remainingUnits, hasRefundableItems, isPartialReturn, isFullyReturned } = getSaleReturnStats(sale);
             return (
               <div key={sale.id} className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-xs">
                 <div className="flex items-start justify-between gap-2">
@@ -285,10 +310,16 @@ export const SalesHistory: React.FC = () => {
                     >
                       {sale.paymentStatus}
                     </span>
-                    {(sale.returned || sale.refunded) && (
+                    {isPartialReturn && (
+                      <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                        <RotateCcw className="w-2.5 h-2.5" />
+                        <span>Partially Refunded ({remainingUnits} left)</span>
+                      </span>
+                    )}
+                    {isFullyReturned && (
                       <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
                         <RotateCcw className="w-2.5 h-2.5" />
-                        <span>Refunded</span>
+                        <span>Fully Returned</span>
                       </span>
                     )}
                   </div>
@@ -330,7 +361,13 @@ export const SalesHistory: React.FC = () => {
                     className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg disabled:opacity-40"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
-                    <span>{hasRefundableItems ? 'Refund' : 'Fully Returned'}</span>
+                    <span>
+                      {isPartialReturn
+                        ? `Refund (${remainingUnits} left)`
+                        : hasRefundableItems
+                        ? 'Refund'
+                        : 'Fully Returned'}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -367,7 +404,7 @@ export const SalesHistory: React.FC = () => {
                 </tr>
               ) : (
                 filteredSales.map(sale => {
-                  const hasRefundableItems = sale.items.some(i => i.quantity - (i.returnedQuantity || 0) > 0);
+                  const { remainingUnits, hasRefundableItems, isPartialReturn, isFullyReturned } = getSaleReturnStats(sale);
                   return (
                     <tr key={sale.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
@@ -426,10 +463,16 @@ export const SalesHistory: React.FC = () => {
                           >
                             {sale.paymentStatus}
                           </span>
-                          {(sale.returned || sale.refunded) && (
+                          {isPartialReturn && (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                              <RotateCcw className="w-2.5 h-2.5" />
+                              <span>Partially Refunded ({remainingUnits} left)</span>
+                            </span>
+                          )}
+                          {isFullyReturned && (
                             <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
                               <RotateCcw className="w-2.5 h-2.5" />
-                              <span>Refunded / Restocked</span>
+                              <span>Fully Returned</span>
                             </span>
                           )}
                         </div>
@@ -450,10 +493,22 @@ export const SalesHistory: React.FC = () => {
                             disabled={!hasRefundableItems}
                             onClick={() => openReturnModal(sale)}
                             className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 border border-rose-200 rounded transition-colors disabled:opacity-40"
-                            title={hasRefundableItems ? 'Select goods to refund & restock' : 'All items already refunded'}
+                            title={
+                              isPartialReturn
+                                ? `Refund remaining ${remainingUnits} unit(s)`
+                                : hasRefundableItems
+                                ? 'Select goods to refund & restock'
+                                : 'All items already refunded'
+                            }
                           >
                             <RotateCcw className="w-3 h-3" />
-                            <span>Refund</span>
+                            <span>
+                              {isPartialReturn
+                                ? `Refund (${remainingUnits} left)`
+                                : hasRefundableItems
+                                ? 'Refund'
+                                : 'Returned'}
+                            </span>
                           </button>
                         </div>
                       </td>
@@ -503,7 +558,7 @@ export const SalesHistory: React.FC = () => {
             <button
               type="button"
               onClick={handleToggleSelectAll}
-              disabled={eligibleItemsForModal.length === 0}
+              disabled={eligibleEntriesForModal.length === 0}
               className="inline-flex items-center gap-2 text-xs font-bold text-slate-800 hover:text-emerald-800 disabled:opacity-40"
             >
               {allEligibleSelected ? (
@@ -514,7 +569,7 @@ export const SalesHistory: React.FC = () => {
               <span>
                 {allEligibleSelected
                   ? 'Deselect All Products'
-                  : `Select All Eligible Goods (${eligibleItemsForModal.length})`}
+                  : `Select All Eligible Goods (${eligibleEntriesForModal.length})`}
               </span>
             </button>
             <span className="text-[11px] font-semibold text-slate-600">
@@ -523,19 +578,22 @@ export const SalesHistory: React.FC = () => {
             </span>
           </div>
 
-          {/* Per-Item Checklist */}
+          {/* Per-Item Checklist (indexed by row for deterministic partial selection) */}
           <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-            {returningSale?.items.map(item => {
-              const alreadyReturned = item.returnedQuantity || 0;
+            {returningSale?.items.map((item, idx) => {
+              const rowKey = String(idx);
+              const alreadyReturned = getReturnedQty(item);
               const eligible = Math.max(0, item.quantity - alreadyReturned);
-              const sel = returnSelections[item.productId] || { selected: false, quantity: eligible };
+              const sel = returnSelections[rowKey] || { selected: false, quantity: eligible };
               const perUnitNet =
-                item.quantity > 0 ? (item.subtotal - (item.discount || 0)) / item.quantity : item.unitPrice;
+                item.quantity > 0
+                  ? Math.max(0, (item.unitPrice * item.quantity - (item.discount || 0)) / item.quantity)
+                  : item.unitPrice;
               const activeQty = sel.selected ? Math.max(1, Math.min(sel.quantity, eligible)) : 0;
 
               return (
                 <div
-                  key={item.productId}
+                  key={`${item.productId}_${idx}`}
                   className={`p-3 rounded-xl border transition-all text-xs ${
                     eligible <= 0
                       ? 'bg-slate-50 border-slate-200 opacity-60'
@@ -548,7 +606,7 @@ export const SalesHistory: React.FC = () => {
                     <button
                       type="button"
                       disabled={eligible <= 0}
-                      onClick={() => toggleItemSelection(item.productId, eligible)}
+                      onClick={() => toggleItemSelection(rowKey, eligible)}
                       className="flex items-start gap-2.5 text-left flex-1 min-w-0 disabled:cursor-not-allowed"
                     >
                       {eligible > 0 && sel.selected ? (
@@ -568,7 +626,7 @@ export const SalesHistory: React.FC = () => {
                           )}
                           {' · '}
                           <span className={eligible > 0 ? 'text-emerald-700 font-bold' : 'text-slate-400'}>
-                            Eligible: {eligible}
+                            {eligible > 0 ? `Eligible: ${eligible}` : 'Fully Refunded'}
                           </span>
                         </div>
                       </div>
@@ -580,7 +638,7 @@ export const SalesHistory: React.FC = () => {
                           <button
                             type="button"
                             disabled={!sel.selected || activeQty <= 1}
-                            onClick={() => updateItemReturnQty(item.productId, activeQty - 1, eligible)}
+                            onClick={() => updateItemReturnQty(rowKey, activeQty - 1, eligible)}
                             className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-40 flex items-center justify-center text-slate-700"
                           >
                             <Minus className="w-3 h-3" />
@@ -591,14 +649,14 @@ export const SalesHistory: React.FC = () => {
                             max={eligible}
                             value={sel.selected ? activeQty : eligible}
                             onChange={e =>
-                              updateItemReturnQty(item.productId, Number(e.target.value) || 1, eligible)
+                              updateItemReturnQty(rowKey, Number(e.target.value) || 1, eligible)
                             }
                             className="w-12 py-1 text-center font-mono font-bold border border-slate-300 rounded-lg text-xs"
                           />
                           <button
                             type="button"
                             disabled={!sel.selected || activeQty >= eligible}
-                            onClick={() => updateItemReturnQty(item.productId, activeQty + 1, eligible)}
+                            onClick={() => updateItemReturnQty(rowKey, activeQty + 1, eligible)}
                             className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-40 flex items-center justify-center text-slate-700"
                           >
                             <Plus className="w-3 h-3" />

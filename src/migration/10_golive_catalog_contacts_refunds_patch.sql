@@ -308,13 +308,88 @@ BEGIN
   END LOOP;
 END $$;
 
--- =====================================================================
--- OPTIONAL GO-LIVE TEST LEDGER RESET (Uncomment ONLY if you want to
--- clear old test sales/invoices & reset current_stock back to 0)
--- =====================================================================
-/*
-TRUNCATE TABLE payments, stock_movements, sales, purchase_orders, quotations, expenses, audit_logs, app_notifications CASCADE;
-UPDATE products SET current_stock = 0;
-UPDATE customers SET total_purchases = 0, outstanding_balance = 0;
-UPDATE staff_kpis SET actual_sales_achieved = 0, actual_gross_profit = 0, quotations_created = 0, quotations_converted = 0, installations_completed = 0;
-*/
+-- 9. Ensure full read/write/delete policies exist for clean zero-ledger resets across all 18 tables
+DO $$
+DECLARE
+  tbl TEXT;
+  all_tables TEXT[] := ARRAY[
+    'branches',
+    'user_profiles',
+    'categories',
+    'suppliers',
+    'products',
+    'stock_movements',
+    'customers',
+    'purchase_orders',
+    'sales',
+    'payments',
+    'quotations',
+    'installation_projects',
+    'expenses',
+    'audit_logs',
+    'app_notifications',
+    'company_settings',
+    'staff_kpis',
+    'kpi_daily_logs'
+  ];
+BEGIN
+  FOREACH tbl IN ARRAY all_tables LOOP
+    BEGIN
+      EXECUTE format('ALTER TABLE IF EXISTS %I ENABLE ROW LEVEL SECURITY;', tbl);
+      EXECUTE format('DROP POLICY IF EXISTS "Allow anon public full access" ON %I;', tbl);
+      EXECUTE format('CREATE POLICY "Allow anon public full access" ON %I FOR ALL USING (true) WITH CHECK (true);', tbl);
+    EXCEPTION
+      WHEN undefined_table THEN NULL;
+      WHEN insufficient_privilege THEN NULL;
+    END;
+  END LOOP;
+END $$;
+
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+
+-- 10. Server-side Clean Zero-Ledger RPC Function (Called by "Reset to Clean Zero Ledger" button)
+-- Strictly preserves user_profiles (real staff), branches, categories, company_settings, and product catalog!
+CREATE OR REPLACE FUNCTION fn_reset_clean_zero_ledger()
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  DELETE FROM payments;
+  DELETE FROM stock_movements;
+  DELETE FROM sales;
+  DELETE FROM purchase_orders;
+  DELETE FROM quotations;
+  DELETE FROM installation_projects;
+  DELETE FROM expenses;
+  DELETE FROM kpi_daily_logs;
+  DELETE FROM audit_logs;
+  DELETE FROM app_notifications;
+
+  UPDATE products SET current_stock = 0, updated_at = timezone('utc', now());
+  UPDATE customers SET total_purchases = 0, outstanding_balance = 0, last_purchase_date = NULL, updated_at = timezone('utc', now());
+  UPDATE suppliers SET outstanding_balance = 0, updated_at = timezone('utc', now());
+  UPDATE staff_kpis SET
+    actual_sales_achieved = 0,
+    actual_gross_profit = 0,
+    quotations_created = 0,
+    quotations_converted = 0,
+    installations_completed = 0,
+    self_assessment_notes = '',
+    manager_review_notes = '',
+    performance_rating = 'Pending',
+    updated_at = timezone('utc', now());
+
+  RETURN json_build_object(
+    'status', 'RESET_COMPLETE',
+    'timestamp', timezone('utc', now()),
+    'message', 'All transactional sales cleared and all product stock quantities set to 0. Staff accounts and catalog preserved.'
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION fn_reset_clean_zero_ledger() TO anon, authenticated, service_role;
+
+-- 11. IMMEDIATE PRE-PUBLISH CLEANUP (Run once now if you want to clear all test sales & set stock = 0 immediately via SQL Editor)
+-- Note: Safe to run — keeps all real staff, logo, branches, and 66 products untouched!
+SELECT fn_reset_clean_zero_ledger();

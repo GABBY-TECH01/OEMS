@@ -68,6 +68,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showZeroConfirmModal, setShowZeroConfirmModal] = useState(false);
+  const [isResettingLedger, setIsResettingLedger] = useState(false);
+  const [zeroResetFeedback, setZeroResetFeedback] = useState<string | null>(null);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [showPwdText, setShowPwdText] = useState(false);
@@ -742,29 +744,51 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
             <div className="text-center space-y-2">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">Reset to Clean Zero Ledger?</h3>
               <p className="text-xs text-slate-600 dark:text-slate-400">
-                This will reset all sales invoices, purchase orders, operating expenses, and inventory quantities to strict zero ledger (₦0.00).
+                Deletes all sales invoices, purchase orders, expenses, and resets every product&apos;s stock quantity to <strong>0</strong> across this device and Supabase.
               </p>
-              <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 p-2 rounded-lg border border-amber-200 dark:border-amber-800">
-                Authorized action reserved for Superadmin Francis Gabriel.
+              <p className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 p-2 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                Safe for Production: All real staff accounts, passwords, company logo, branches, and products stay preserved.
               </p>
+              {zeroResetFeedback && (
+                <p className="text-[11px] font-medium text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 p-2 rounded-lg border border-amber-200 dark:border-amber-800">
+                  {zeroResetFeedback}
+                </p>
+              )}
             </div>
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => setShowZeroConfirmModal(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                disabled={isResettingLedger}
+                onClick={() => {
+                  setZeroResetFeedback(null);
+                  setShowZeroConfirmModal(false);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  resetToZeroLedger();
-                  setShowZeroConfirmModal(false);
+                disabled={isResettingLedger}
+                onClick={async () => {
+                  if (isResettingLedger) return;
+                  setIsResettingLedger(true);
+                  setZeroResetFeedback(null);
+                  try {
+                    const res = await resetToZeroLedger();
+                    if (res.error && !res.syncedToCloud) {
+                      setZeroResetFeedback(`Local reset done, but cloud sync reported: ${res.error}`);
+                    } else {
+                      setShowZeroConfirmModal(false);
+                    }
+                  } finally {
+                    setIsResettingLedger(false);
+                  }
                 }}
-                className="px-4 py-2 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-sm"
+                className="px-4 py-2 text-xs font-semibold bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white rounded-lg shadow-sm inline-flex items-center gap-1.5"
               >
-                Confirm Zero Ledger Reset
+                <RefreshCw className={`w-3.5 h-3.5 ${isResettingLedger ? 'animate-spin' : ''}`} />
+                <span>{isResettingLedger ? 'Clearing Cloud & Local...' : 'Confirm Zero Ledger Reset'}</span>
               </button>
             </div>
           </div>

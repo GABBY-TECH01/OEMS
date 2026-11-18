@@ -139,7 +139,6 @@ export const Settings: React.FC = () => {
     assignStaffRole,
     rolePermissions,
     updateRolePermission,
-    resetDatabase,
     resetToZeroLedger,
     refreshData,
     setActiveTab,
@@ -157,7 +156,7 @@ export const Settings: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [showZeroLedgerConfirm, setShowZeroLedgerConfirm] = useState(false);
-  const [showResetDemoConfirm, setShowResetDemoConfirm] = useState(false);
+  const [isResettingLedger, setIsResettingLedger] = useState(false);
   const [restoreError, setRestoreError] = useState('');
 
   // Logo Upload & Dynamic PWA Manifest Customization State
@@ -1594,18 +1593,20 @@ WHERE id = 'cfg_offnot_main';`;
 
             <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl space-y-3">
               <div className="font-bold text-xs text-amber-950 flex items-center gap-1.5">
-                <RefreshCw className="w-4 h-4 text-amber-700" />
+                <RefreshCw className={`w-4 h-4 text-amber-700 ${isResettingLedger ? 'animate-spin' : ''}`} />
                 <span>Clean Zero Ledger</span>
               </div>
               <p className="text-[11px] text-amber-900/80">
-                Resets all sales, purchase orders, expenses, and projects to ₦0.00 while preserving solar product catalogs and branches.
+                Deletes all sales, purchase orders, expenses, and resets all product stock quantities to 0 (both locally &amp; in Supabase) while keeping all real staff accounts, logo, branches, and products intact.
               </p>
               <button
+                type="button"
+                disabled={isResettingLedger}
                 onClick={() => setShowZeroLedgerConfirm(true)}
-                className="w-full py-2 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                className="w-full py-2 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 disabled:opacity-60 border border-amber-300 rounded-lg transition-colors flex items-center justify-center gap-1.5"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Reset to Zero Ledger</span>
+                <RefreshCw className={`w-3.5 h-3.5 ${isResettingLedger ? 'animate-spin' : ''}`} />
+                <span>{isResettingLedger ? 'Resetting Cloud & Local Ledger...' : 'Reset to Clean Zero Ledger'}</span>
               </button>
             </div>
           </div>
@@ -1623,30 +1624,27 @@ WHERE id = 'cfg_offnot_main';`;
       <ConfirmDialog
         isOpen={showZeroLedgerConfirm}
         title="Reset to Clean Zero Accounting Ledger?"
-        message="This will reset all sales, purchase orders, customer balances, expenses, and stock movements to exactly ₦0.00. Solar catalog products, categories, branch profiles, and staff accounts will be preserved with 0 stock balances for pristine accounting."
-        confirmLabel="Confirm Clean Zero Ledger"
+        message="This will permanently delete all recorded sales, refunds, purchase orders, customer balances, expenses, and stock movements, and set every product quantity to 0 across this device and Supabase. All real staff accounts, passwords, company logo, branches, and catalog items will remain safely preserved."
+        confirmLabel={isResettingLedger ? 'Clearing...' : 'Confirm Clean Zero Ledger'}
         isDestructive={false}
-        onConfirm={() => {
-          resetToZeroLedger();
+        onConfirm={async () => {
+          if (isResettingLedger) return;
+          setIsResettingLedger(true);
           setShowZeroLedgerConfirm(false);
-          showTemporaryStatus('All accounting figures successfully reset to clean zero ledger (₦0.00).');
+          try {
+            const res = await resetToZeroLedger();
+            if (res.syncedToCloud) {
+              showTemporaryStatus('Clean Zero Ledger complete! All sales deleted and all product quantities set to 0 across app & Supabase (staff & catalog preserved).');
+            } else if (res.error) {
+              showTemporaryStatus(`Local ledger reset & stock zeroed. Cloud notice: ${res.error}`);
+            } else {
+              showTemporaryStatus('All sales deleted and product quantities reset to 0 locally (staff accounts & catalog preserved).');
+            }
+          } finally {
+            setIsResettingLedger(false);
+          }
         }}
         onCancel={() => setShowZeroLedgerConfirm(false)}
-      />
-
-      {/* Confirm Demo Reset Dialog */}
-      <ConfirmDialog
-        isOpen={showResetDemoConfirm}
-        title="Reset Demo Data?"
-        message="This will reset all data to the initial Offnot Energy demo state."
-        confirmLabel="Reset"
-        isDestructive={true}
-        onConfirm={() => {
-          resetDatabase();
-          setShowResetDemoConfirm(false);
-          showTemporaryStatus('Database reset.');
-        }}
-        onCancel={() => setShowResetDemoConfirm(false)}
       />
     </div>
   );

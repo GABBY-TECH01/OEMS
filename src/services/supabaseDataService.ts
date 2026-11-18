@@ -1277,17 +1277,41 @@ export async function saveSaleReturnToSupabase(
   try {
     const prodList = Array.isArray(returnedProducts) ? returnedProducts : [returnedProducts];
     const moveList = Array.isArray(movements) ? movements : [movements];
+    const resolvedProductIds = new Map<string, string>();
+    const now = new Date().toISOString();
 
-    // 1. Update products with restored current_stock in Supabase
+    // 1. Update products with restored current_stock in Supabase (match by id or sku)
     for (const prod of prodList) {
-      const { error: prodErr } = await client
+      let targetCloudId = prod.id;
+      const { data: updatedById, error: prodErr } = await client
         .from('products')
         .update({
           current_stock: prod.currentStock,
-          updated_at: new Date().toISOString(),
+          updated_at: now,
         })
-        .eq('id', prod.id);
+        .eq('id', prod.id)
+        .select('id');
+
       if (prodErr) throw prodErr;
+
+      if ((!updatedById || updatedById.length === 0) && prod.sku) {
+        const { data: updatedBySku, error: skuErr } = await client
+          .from('products')
+          .update({
+            current_stock: prod.currentStock,
+            updated_at: now,
+          })
+          .eq('sku', prod.sku)
+          .select('id');
+        if (skuErr) throw skuErr;
+        if (updatedBySku && updatedBySku.length > 0) {
+          targetCloudId = updatedBySku[0].id;
+        }
+      }
+      resolvedProductIds.set(prod.id, targetCloudId);
+      if (prod.sku) {
+        resolvedProductIds.set(prod.sku, targetCloudId);
+      }
     }
 
     // 2. Update sale record with net grand_total, COGS, gross_profit, paid_amount, balance_due, items, and refund metadata
@@ -1301,7 +1325,7 @@ export async function saveSaleReturnToSupabase(
       gross_profit: Number(sale.grossProfit || 0),
       payment_status: sale.paymentStatus || 'paid',
       notes: sale.notes || null,
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     };
 
     const fullSaleUpdate = {
@@ -1315,18 +1339,45 @@ export async function saveSaleReturnToSupabase(
       return_records: Array.isArray(sale.returnRecords) ? sale.returnRecords : [],
     };
 
-    let { error: saleUpdErr } = await client.from('sales').update(fullSaleUpdate).eq('id', sale.id);
+    let { data: updatedSaleRows, error: saleUpdErr } = await client
+      .from('sales')
+      .update(fullSaleUpdate)
+      .eq('id', sale.id)
+      .select('id');
+
     if (saleUpdErr && isMissingColumnError(saleUpdErr)) {
-      const retry = await client.from('sales').update(baseSaleUpdate).eq('id', sale.id);
+      const retry = await client
+        .from('sales')
+        .update(baseSaleUpdate)
+        .eq('id', sale.id)
+        .select('id');
+      updatedSaleRows = retry.data;
       saleUpdErr = retry.error;
     }
+
+    // Fallback by invoice_number if id differed across synced devices
+    if (!saleUpdErr && (!updatedSaleRows || updatedSaleRows.length === 0) && sale.invoiceNumber) {
+      let { error: invErr } = await client
+        .from('sales')
+        .update(fullSaleUpdate)
+        .eq('invoice_number', sale.invoiceNumber);
+      if (invErr && isMissingColumnError(invErr)) {
+        const retryInv = await client
+          .from('sales')
+          .update(baseSaleUpdate)
+          .eq('invoice_number', sale.invoiceNumber);
+        invErr = retryInv.error;
+      }
+      saleUpdErr = invErr;
+    }
+
     if (saleUpdErr) throw saleUpdErr;
 
     // 3. Record customer return movements in stock_movements using exact schema columns (`type`, `created_at`)
     if (moveList.length > 0) {
       const movementRows = moveList.map(movement => ({
         id: movement.id,
-        product_id: movement.productId,
+        product_id: resolvedProductIds.get(movement.productId) || resolvedProductIds.get(movement.sku) || movement.productId,
         product_name: movement.productName,
         sku: movement.sku,
         type: 'customer_return',
@@ -1342,7 +1393,7 @@ export async function saveSaleReturnToSupabase(
         reason: movement.reason,
         performed_by_user_id: movement.performedByUserId || null,
         performed_by_user_name: movement.performedByUserName,
-        created_at: movement.timestamp || new Date().toISOString(),
+        created_at: movement.timestamp || now,
       }));
       const { error: movErr } = await client.from('stock_movements').upsert(movementRows);
       if (movErr) throw movErr;
@@ -1355,7 +1406,7 @@ export async function saveSaleReturnToSupabase(
         .update({
           total_purchases: Number(customer.totalPurchases || 0),
           outstanding_balance: Number(customer.outstandingBalance || 0),
-          updated_at: new Date().toISOString(),
+          updated_at: now,
         })
         .eq('id', customer.id);
     }
@@ -1364,6 +1415,176 @@ export async function saveSaleReturnToSupabase(
   } catch (err: any) {
     console.error('saveSaleReturnToSupabase error:', err);
     return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Reset all cloud transactional tables (sales, payments, stock_movements, POs, quotations,
+ * projects, expenses, KPI actuals, notifications & audit logs) and set EVERY product's current_stock = 0.
+ * Strictly preserves user_profiles (real staff), branches, categories, company_settings (logo/contacts),
+ * and customer/supplier/product catalog definitions.
+ */
+export async function resetCleanZeroLedgerInSupabase(
+  cleanNotification?: AppNotification,
+  cleanAuditLog?: AuditLog
+): Promise<{ success: boolean; error?: string; clearedTables: string[] }> {
+  const client = getSupabaseClient();
+  if (!client || !isSupabaseConfigured()) {
+    return { success: false, error: 'Supabase is not configured', clearedTables: [] };
+  }
+
+  const now = new Date().toISOString();
+  const clearedTables: string[] = [];
+
+  try {
+    // Attempt server-side atomic RPC first (created by Migration Patch 10)
+    const { data: rpcData, error: rpcErr } = await client.rpc('fn_reset_clean_zero_ledger');
+    if (!rpcErr && rpcData) {
+      if (cleanNotification) {
+        await client.from('app_notifications').insert({
+          id: cleanNotification.id,
+          title: cleanNotification.title,
+          message: cleanNotification.message,
+          type: cleanNotification.type,
+          read: cleanNotification.read,
+          link_module: cleanNotification.linkModule || 'dashboard',
+          created_at: cleanNotification.createdAt,
+        });
+      }
+      if (cleanAuditLog) {
+        await saveAuditLogToSupabase(cleanAuditLog);
+      }
+      return {
+        success: true,
+        clearedTables: [
+          'payments',
+          'stock_movements',
+          'sales',
+          'purchase_orders',
+          'quotations',
+          'installation_projects',
+          'expenses',
+          'kpi_daily_logs',
+          'products(stock=0)',
+          'customers(balances=0)',
+          'suppliers(balances=0)',
+          'staff_kpis(actuals=0)',
+        ],
+      };
+    }
+
+    // Fallback: direct REST operations across operational tables (safe with Patch 06/07 FOR ALL policies)
+    const tablesToClear = [
+      'payments',
+      'stock_movements',
+      'sales',
+      'purchase_orders',
+      'quotations',
+      'installation_projects',
+      'expenses',
+      'kpi_daily_logs',
+      'audit_logs',
+      'app_notifications',
+    ];
+
+    const deleteErrors: string[] = [];
+    for (const tbl of tablesToClear) {
+      const { error } = await client.from(tbl).delete().neq('id', '');
+      if (error) {
+        // Ignore missing optional tables (e.g. if KPI patch wasn't applied yet)
+        const msg = String(error.message || '').toLowerCase();
+        if (!msg.includes('does not exist') && !msg.includes('schema cache')) {
+          deleteErrors.push(`${tbl}: ${error.message}`);
+        }
+      } else {
+        clearedTables.push(tbl);
+      }
+    }
+
+    // Zero all product stock quantities without deleting any catalog items
+    const { error: prodErr } = await client
+      .from('products')
+      .update({ current_stock: 0, updated_at: now })
+      .neq('id', '');
+    if (prodErr) {
+      deleteErrors.push(`products: ${prodErr.message}`);
+    } else {
+      clearedTables.push('products(stock=0)');
+    }
+
+    // Zero customer transactional balances while keeping CRM profiles
+    const { error: custErr } = await client
+      .from('customers')
+      .update({
+        total_purchases: 0,
+        outstanding_balance: 0,
+        last_purchase_date: null,
+        updated_at: now,
+      })
+      .neq('id', '');
+    if (!custErr) {
+      clearedTables.push('customers(balances=0)');
+    }
+
+    // Zero supplier payables
+    const { error: supErr } = await client
+      .from('suppliers')
+      .update({ outstanding_balance: 0 })
+      .neq('id', '');
+    if (!supErr) {
+      clearedTables.push('suppliers(balances=0)');
+    }
+
+    // Reset KPI actuals to 0 while keeping assigned staff targets
+    const { error: kpiErr } = await client
+      .from('staff_kpis')
+      .update({
+        actual_sales_achieved: 0,
+        actual_gross_profit: 0,
+        quotations_created: 0,
+        quotations_converted: 0,
+        installations_completed: 0,
+        self_assessment_notes: '',
+        manager_review_notes: '',
+        performance_rating: 'Pending',
+        updated_at: now,
+      })
+      .neq('id', '');
+    if (!kpiErr) {
+      clearedTables.push('staff_kpis(actuals=0)');
+    }
+
+    if (cleanNotification) {
+      await client.from('app_notifications').insert({
+        id: cleanNotification.id,
+        title: cleanNotification.title,
+        message: cleanNotification.message,
+        type: cleanNotification.type,
+        read: cleanNotification.read,
+        link_module: cleanNotification.linkModule || 'dashboard',
+        created_at: cleanNotification.createdAt,
+      });
+    }
+    if (cleanAuditLog) {
+      await saveAuditLogToSupabase(cleanAuditLog);
+    }
+
+    if (deleteErrors.length > 0) {
+      return {
+        success: false,
+        error: deleteErrors.join(' | '),
+        clearedTables,
+      };
+    }
+
+    return { success: true, clearedTables };
+  } catch (err: any) {
+    console.error('resetCleanZeroLedgerInSupabase error:', err);
+    return {
+      success: false,
+      error: err.message || String(err),
+      clearedTables,
+    };
   }
 }
 
