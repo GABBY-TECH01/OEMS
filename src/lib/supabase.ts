@@ -12,16 +12,48 @@ export const STORAGE_SUPABASE_URL_KEY = SUPABASE_STORAGE_KEYS.URL;
 export const STORAGE_SUPABASE_ANON_KEY = SUPABASE_STORAGE_KEYS.ANON_KEY;
 
 export type SupabaseConfigSource = 'local_storage' | 'vercel_env' | 'project_config' | 'none';
+export const SUPABASE_CONFIG_CHANGED_EVENT = 'offnot:supabase-config-changed';
+
+function cleanCredentialValue(raw: string | null | undefined): string {
+  if (!raw) return '';
+  return raw.trim().replace(/^['"]+|['"]+$/g, '').trim();
+}
+
+export function normalizeSupabaseUrl(raw: string | null | undefined): string {
+  let cleaned = cleanCredentialValue(raw).replace(/\/+$/, '');
+  if (!cleaned) return '';
+
+  // Auto-convert pasted Supabase Dashboard URL (e.g. https://supabase.com/dashboard/project/<ref>)
+  const dashboardMatch = cleaned.match(/^https?:\/\/supabase\.com\/dashboard\/project\/([a-z0-9-]+)(?:\/.*)?$/i);
+  if (dashboardMatch && dashboardMatch[1]) {
+    cleaned = `https://${dashboardMatch[1]}.supabase.co`;
+  }
+
+  // Add https:// if user entered bare domain like xyz.supabase.co
+  if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://') && cleaned.includes('.supabase.co')) {
+    cleaned = `https://${cleaned}`;
+  }
+
+  return cleaned;
+}
 
 export function getSupabaseConfigSource(): SupabaseConfigSource {
   if (typeof window !== 'undefined') {
-    const local = localStorage.getItem(STORAGE_SUPABASE_URL_KEY);
-    if (local && local.trim().startsWith('http')) return 'local_storage';
+    const localUrl = normalizeSupabaseUrl(localStorage.getItem(STORAGE_SUPABASE_URL_KEY));
+    const localKey = cleanCredentialValue(localStorage.getItem(STORAGE_SUPABASE_ANON_KEY));
+    if (localUrl && localUrl.startsWith('http') && localKey.length >= 20) return 'local_storage';
   }
-  const envVal = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-  if (envVal && envVal.startsWith('http')) return 'vercel_env';
+  const envVal = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL);
+  const envKey = cleanCredentialValue(import.meta.env.VITE_SUPABASE_ANON_KEY);
+  if (envVal && envVal.startsWith('http') && envKey.length >= 20) return 'vercel_env';
 
-  if (DEFAULT_SUPABASE_CONFIG.url && DEFAULT_SUPABASE_CONFIG.url.startsWith('http') && !DEFAULT_SUPABASE_CONFIG.url.includes('placeholder')) {
+  if (
+    DEFAULT_SUPABASE_CONFIG.url &&
+    DEFAULT_SUPABASE_CONFIG.url.startsWith('http') &&
+    !DEFAULT_SUPABASE_CONFIG.url.includes('placeholder') &&
+    DEFAULT_SUPABASE_CONFIG.anonKey &&
+    DEFAULT_SUPABASE_CONFIG.anonKey.length >= 20
+  ) {
     return 'project_config';
   }
   return 'none';
@@ -29,28 +61,30 @@ export function getSupabaseConfigSource(): SupabaseConfigSource {
 
 export function getSupabaseUrl(): string {
   if (typeof window !== 'undefined') {
-    const local = localStorage.getItem(STORAGE_SUPABASE_URL_KEY);
-    if (local && local.trim().startsWith('http')) return local.trim();
+    const local = normalizeSupabaseUrl(localStorage.getItem(STORAGE_SUPABASE_URL_KEY));
+    if (local && local.startsWith('http')) return local;
   }
-  const envVal = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+  const envVal = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL);
   if (envVal && envVal.startsWith('http')) return envVal;
 
-  if (DEFAULT_SUPABASE_CONFIG.url && DEFAULT_SUPABASE_CONFIG.url.startsWith('http')) {
-    return DEFAULT_SUPABASE_CONFIG.url;
+  const defaultUrl = normalizeSupabaseUrl(DEFAULT_SUPABASE_CONFIG.url);
+  if (defaultUrl && defaultUrl.startsWith('http')) {
+    return defaultUrl;
   }
   return '';
 }
 
 export function getSupabaseAnonKey(): string {
   if (typeof window !== 'undefined') {
-    const local = localStorage.getItem(STORAGE_SUPABASE_ANON_KEY);
-    if (local && local.trim().length > 10) return local.trim();
+    const local = cleanCredentialValue(localStorage.getItem(STORAGE_SUPABASE_ANON_KEY));
+    if (local && local.length > 10) return local;
   }
-  const envVal = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  const envVal = cleanCredentialValue(import.meta.env.VITE_SUPABASE_ANON_KEY);
   if (envVal && envVal.length > 10) return envVal;
 
-  if (DEFAULT_SUPABASE_CONFIG.anonKey && DEFAULT_SUPABASE_CONFIG.anonKey.length > 10) {
-    return DEFAULT_SUPABASE_CONFIG.anonKey;
+  const defaultKey = cleanCredentialValue(DEFAULT_SUPABASE_CONFIG.anonKey);
+  if (defaultKey && defaultKey.length > 10) {
+    return defaultKey;
   }
   return '';
 }
@@ -62,8 +96,11 @@ export function isSupabaseConfigured(): boolean {
     url &&
     key &&
     url.startsWith('http') &&
+    key.length >= 20 &&
     !url.includes('placeholder') &&
-    !key.includes('placeholder')
+    !url.includes('your-project-ref') &&
+    !key.includes('placeholder') &&
+    !key.includes('your-anon-public-key')
   );
 }
 
@@ -102,10 +139,24 @@ export function getSupabaseClient(): SupabaseClient | null {
 // Default export client
 export const supabase: SupabaseClient | null = getSupabaseClient();
 
+function notifySupabaseConfigChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(SUPABASE_CONFIG_CHANGED_EVENT));
+  }
+}
+
 export function saveSupabaseCredentials(url: string, anonKey: string): { success: boolean; error?: string } {
   try {
-    const trimmedUrl = url.trim();
-    const trimmedKey = anonKey.trim();
+    const rawTrimmed = cleanCredentialValue(url);
+    if (rawTrimmed.startsWith('postgres://') || rawTrimmed.startsWith('postgresql://')) {
+      return {
+        success: false,
+        error: 'Please enter the HTTPS Project URL (from Project Settings → API, e.g. https://xxxx.supabase.co), not the PostgreSQL connection string.',
+      };
+    }
+
+    const trimmedUrl = normalizeSupabaseUrl(rawTrimmed);
+    const trimmedKey = cleanCredentialValue(anonKey);
 
     if (!trimmedUrl.startsWith('http')) {
       return { success: false, error: 'Invalid URL. Project URL must start with https://' };
@@ -117,9 +168,12 @@ export function saveSupabaseCredentials(url: string, anonKey: string): { success
     localStorage.setItem(STORAGE_SUPABASE_URL_KEY, trimmedUrl);
     localStorage.setItem(STORAGE_SUPABASE_ANON_KEY, trimmedKey);
 
-    // Refresh client
+    // Refresh client & notify AppContext immediately
     cachedClient = null;
+    lastUsedUrl = '';
+    lastUsedKey = '';
     getSupabaseClient();
+    notifySupabaseConfigChanged();
 
     return { success: true };
   } catch (err: unknown) {
@@ -132,6 +186,9 @@ export function clearSupabaseCredentials(): void {
   localStorage.removeItem(STORAGE_SUPABASE_URL_KEY);
   localStorage.removeItem(STORAGE_SUPABASE_ANON_KEY);
   cachedClient = null;
+  lastUsedUrl = '';
+  lastUsedKey = '';
+  notifySupabaseConfigChanged();
 }
 
 /**
@@ -349,25 +406,52 @@ export async function testSupabaseConnection(): Promise<{
 
   const tablesFound: string[] = [];
   const missingTables: string[] = [];
+  const probeErrors: { table: string; message: string; code?: string }[] = [];
 
-  for (const tbl of expectedTables) {
-    try {
-      const { error } = await client.from(tbl).select('*', { count: 'exact', head: true });
-      if (!error) {
-        tablesFound.push(tbl);
-      } else {
+  await Promise.all(
+    expectedTables.map(async (tbl) => {
+      try {
+        const { error } = await client.from(tbl).select('*', { count: 'exact', head: true });
+        if (!error) {
+          tablesFound.push(tbl);
+        } else {
+          missingTables.push(tbl);
+          probeErrors.push({ table: tbl, message: error.message || 'Unknown error', code: error.code });
+        }
+      } catch (err: unknown) {
         missingTables.push(tbl);
+        probeErrors.push({
+          table: tbl,
+          message: err instanceof Error ? err.message : String(err),
+        });
       }
-    } catch {
-      missingTables.push(tbl);
-    }
-  }
+    })
+  );
 
   if (tablesFound.length === 0) {
+    const firstErr = probeErrors[0];
+    const errMsgLower = (firstErr?.message || '').toLowerCase();
+    const errCode = String(firstErr?.code || '');
+    const isTableMissingOnly =
+      errCode === 'PGRST205' ||
+      errCode === '42P01' ||
+      errMsgLower.includes('could not find the table') ||
+      (errMsgLower.includes('relation') && errMsgLower.includes('does not exist'));
+
+    if (!isTableMissingOnly && firstErr) {
+      return {
+        connected: false,
+        message: `Supabase connection failed: ${firstErr.message}. Please verify your Project URL, Anon Public Key, internet access, and that your Supabase project is active (not paused).`,
+        tablesFound,
+        missingTables,
+        details: { error: firstErr.message, code: firstErr.code },
+      };
+    }
+
     return {
       connected: true,
       message:
-        'Connected to Supabase project! However, no tables were found in the public schema. Please copy and run the SQL migration script in the SQL Editor.',
+        'Connected to Supabase project! However, no tables were found in the public schema. Please copy and run the Master SQL migration script in the SQL Editor.',
       tablesFound,
       missingTables,
     };
@@ -376,7 +460,7 @@ export async function testSupabaseConnection(): Promise<{
   if (missingTables.length > 0) {
     return {
       connected: true,
-      message: `Connected to Supabase. Found ${tablesFound.length} of ${expectedTables.length} tables. Run the migration script to create the remaining tables.`,
+      message: `Connected to Supabase. Found ${tablesFound.length} of ${expectedTables.length} tables. Run Patch 10 or the Master SQL script to create/update any remaining tables.`,
       tablesFound,
       missingTables,
     };

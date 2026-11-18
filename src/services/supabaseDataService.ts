@@ -109,6 +109,13 @@ export async function fetchAllDataFromSupabase(): Promise<SupabaseDataset | null
       client.from('kpi_daily_logs').select('*').order('created_at', { ascending: false }).limit(500),
     ]);
 
+    // Detect connection/auth/RLS failures: if all core tables errored, throw the real Supabase error
+    const coreResponses = [branchesRes, usersRes, productsRes, salesRes, settingsRes];
+    const coreErrors = coreResponses.map(r => r.error).filter(Boolean);
+    if (coreErrors.length === coreResponses.length && coreErrors[0]) {
+      throw new Error(coreErrors[0].message || 'Supabase core query failed');
+    }
+
     // Map Branches
     const branches: Branch[] = (branchesRes.data || []).map((b: any) => ({
       id: b.id,

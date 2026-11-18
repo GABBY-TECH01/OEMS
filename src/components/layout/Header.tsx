@@ -23,11 +23,13 @@ import {
   X,
   Menu,
   WifiOff,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { useApp, ActiveTab } from '../../context/AppContext';
 import { getRoleLabel } from '../../utils/formatters';
 import { UserRole } from '../../types';
 import { BRAND_LOGO_URL } from '../../constants/branding';
+import { isSupabaseConfigured } from '../../lib/supabase';
 
 interface HeaderProps {
   onOpenSidebar?: () => void;
@@ -58,6 +60,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
     isSupabaseConnected,
     supabaseLoading,
     supabaseSyncTime,
+    supabaseSyncError,
     syncWithSupabase,
     offlineQueueCount,
     isOnline,
@@ -330,7 +333,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
       )}
 
       {/* Supabase Cloud Live Database Handshake Pill */}
-      <div className="flex items-center">
+      <div className="flex items-center gap-1">
         {isSupabaseConnected ? (
           <button
             type="button"
@@ -350,12 +353,44 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
               <span className="text-[9px] text-emerald-700/80 font-mono hidden md:inline">({supabaseSyncTime || 'Synced'})</span>
             )}
           </button>
+        ) : isSupabaseConfigured() ? (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => syncWithSupabase()}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-rose-800 bg-rose-50 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-lg hover:bg-rose-100 transition-all shadow-2xs"
+              title={supabaseSyncError ? `Database sync paused: ${supabaseSyncError}. Click to reconnect now.` : 'Supabase database disconnected. Click to reconnect now.'}
+            >
+              <span className="h-2 w-2 rounded-full bg-rose-500"></span>
+              <Database className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+              <span className="hidden sm:inline">{supabaseLoading ? 'Connecting...' : 'Reconnect DB'}</span>
+              {supabaseLoading && <RefreshCw className="w-3 h-3 animate-spin text-rose-600 ml-0.5" />}
+            </button>
+            {(currentUser.role === 'super_admin' || (currentUser.role === 'admin' && currentUser.hasFullSystemAccess)) && (
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.setItem('offnot_settings_subtab', 'supabase');
+                  window.dispatchEvent(new CustomEvent('offnot:open-settings-subtab', { detail: 'supabase' }));
+                  setActiveTab('settings');
+                }}
+                className="p-1 text-slate-500 hover:text-emerald-800 bg-slate-100 hover:bg-emerald-50 border border-slate-200 rounded-lg transition-colors"
+                title="Open Supabase Live DB & SQL Settings"
+              >
+                <SettingsIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         ) : (
           <button
             type="button"
-            onClick={() => setActiveTab('settings')}
+            onClick={() => {
+              sessionStorage.setItem('offnot_settings_subtab', 'supabase');
+              window.dispatchEvent(new CustomEvent('offnot:open-settings-subtab', { detail: 'supabase' }));
+              setActiveTab('settings');
+            }}
             className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-amber-800 bg-amber-50 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-lg hover:bg-amber-100 transition-all shadow-2xs"
-            title="Supabase live cloud database is not connected on this device. Click to configure credentials in Company Settings."
+            title="Supabase live cloud database is not configured on this device. Click to enter your Supabase Project URL and Anon Key."
           >
             <span className="h-2 w-2 rounded-full bg-amber-500"></span>
             <Database className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />

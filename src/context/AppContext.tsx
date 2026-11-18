@@ -49,7 +49,14 @@ import {
   getLagosDateKey,
   getLagosMonthKey,
 } from '../utils/formatters';
-import { getSupabaseClient, isSupabaseConfigured, syncLocalToSupabase } from '../lib/supabase';
+import {
+  getSupabaseClient,
+  isSupabaseConfigured,
+  syncLocalToSupabase,
+  SUPABASE_CONFIG_CHANGED_EVENT,
+  STORAGE_SUPABASE_URL_KEY,
+  STORAGE_SUPABASE_ANON_KEY,
+} from '../lib/supabase';
 import {
   fetchAllDataFromSupabase,
   saveProductToSupabase,
@@ -463,8 +470,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const syncInFlightRef = useRef(false);
+  const syncPromiseRef = useRef<Promise<boolean> | null>(null);
   const isResettingRef = useRef(false);
   const inFlightCloudWritesRef = useRef(0);
+  const [supabaseConfigVersion, setSupabaseConfigVersion] = useState(0);
+
+  useEffect(() => {
+    const handleConfigChange = () => {
+      setSupabaseConfigVersion(v => v + 1);
+    };
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_SUPABASE_URL_KEY || e.key === STORAGE_SUPABASE_ANON_KEY) {
+        setSupabaseConfigVersion(v => v + 1);
+      }
+    };
+    window.addEventListener(SUPABASE_CONFIG_CHANGED_EVENT, handleConfigChange);
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener(SUPABASE_CONFIG_CHANGED_EVENT, handleConfigChange);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
 
   const trackCloudWrite = useCallback(<T,>(promise: Promise<T>): Promise<T> => {
     inFlightCloudWritesRef.current += 1;
@@ -476,33 +502,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const syncWithSupabase = useCallback(async (): Promise<boolean> => {
     if (!isSupabaseConfigured()) {
       setIsSupabaseConnected(false);
+      setSupabaseSyncError('Supabase credentials are not configured on this device.');
       return false;
     }
 
-    if (syncInFlightRef.current || isResettingRef.current || inFlightCloudWritesRef.current > 0) {
+    if (isResettingRef.current || inFlightCloudWritesRef.current > 0) {
       return false;
     }
+
+    if (syncInFlightRef.current && syncPromiseRef.current) {
+      return syncPromiseRef.current;
+    }
+
     syncInFlightRef.current = true;
     setSupabaseLoading(true);
     setSupabaseSyncError(null);
 
-    try {
-      // Flush any offline queued sales, returns, stock adjustments, or settings BEFORE pulling cloud state
-      if (navigator.onLine) {
-        const pendingTotal = Math.max(
-          StorageService.getOfflineQueueCount(),
-          await IndexedDbService.getPendingCount().catch(() => 0)
-        );
-        if (pendingTotal > 0) {
-          await flushOfflineSyncQueue();
+    const runSync = async (): Promise<boolean> => {
+      try {
+        // Flush any offline queued sales, returns, stock adjustments, or settings BEFORE pulling cloud state
+        if (navigator.onLine) {
+          const pendingTotal = Math.max(
+            StorageService.getOfflineQueueCount(),
+            await IndexedDbService.getPendingCount().catch(() => 0)
+          );
+          if (pendingTotal > 0) {
+            await flushOfflineSyncQueue();
+          }
         }
-      }
 
-      if (isResettingRef.current || inFlightCloudWritesRef.current > 0) {
-        return false;
-      }
+        if (isResettingRef.current || inFlightCloudWritesRef.current > 0) {
+          return false;
+        }
 
-      const cloudData = await fetchAllDataFromSupabase();
+        const cloudData = await fetchAllDataFromSupabase();
       if (cloudData) {
         if (isResettingRef.current) {
           return false;
@@ -649,23 +682,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         StorageService.saveStaffKpis(cloudData.staffKpis || []);
 
         setIsSupabaseConnected(true);
+        setSupabaseSyncError(null);
         const timeNow = new Date().toLocaleTimeString();
         setSupabaseSyncTime(timeNow);
         return true;
       } else {
         setIsSupabaseConnected(false);
-        setSupabaseSyncError('Connected to Supabase endpoint, but tables returned empty.');
+        setSupabaseSyncError('Could not retrieve data from Supabase. Check Project URL, Anon Key, and network connectivity.');
         return false;
       }
-    } catch (err: any) {
-      console.warn('Supabase sync warning:', err);
-      setIsSupabaseConnected(false);
-      setSupabaseSyncError(err.message || 'Supabase handshake error');
-      return false;
-    } finally {
-      setSupabaseLoading(false);
-      syncInFlightRef.current = false;
-    }
+      } catch (err: any) {
+        console.warn('Supabase sync warning:', err);
+        setIsSupabaseConnected(false);
+        setSupabaseSyncError(err.message || 'Supabase handshake error');
+        return false;
+      } finally {
+        setSupabaseLoading(false);
+        syncInFlightRef.current = false;
+        syncPromiseRef.current = null;
+      }
+    };
+
+    const promise = runSync();
+    syncPromiseRef.current = promise;
+    return promise;
   }, [flushOfflineSyncQueue]);
 
   // Monitor network online / offline transitions & trigger instant automatic sync
@@ -683,12 +723,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsOnline(false);
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine && isSupabaseConfigured()) {
+        syncWithSupabase();
+      }
+    };
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [flushOfflineSyncQueue, syncWithSupabase]);
 
@@ -706,13 +754,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     StorageService.initDatabase();
     refreshData();
-    // Immediate handshake with live Supabase database
-    if (isSupabaseConfigured()) {
-      syncWithSupabase();
-    }
-  }, [syncWithSupabase]);
 
-  // Realtime multi-device sync across all operational tables (debounced to prevent floods)
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    if (isSupabaseConfigured()) {
+      syncWithSupabase().then(ok => {
+        if (!ok && navigator.onLine) {
+          retryTimer = setTimeout(() => {
+            if (navigator.onLine && isSupabaseConfigured()) {
+              syncWithSupabase();
+            }
+          }, 4000);
+        }
+      });
+    } else {
+      setIsSupabaseConnected(false);
+      setSupabaseSyncTime(null);
+      setSupabaseSyncError('Supabase credentials are not configured on this device.');
+    }
+
+    return () => {
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [syncWithSupabase, supabaseConfigVersion]);
+
+  // Realtime multi-device sync across all operational tables (re-binds when config changes)
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
     const client = getSupabaseClient();
@@ -744,7 +809,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'expenses',
     ];
 
-    let channel = client.channel('app_realtime_all_modules');
+    let channel = client.channel(`app_realtime_all_modules_${supabaseConfigVersion}`);
     realtimeTables.forEach(table => {
       channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleRealtimeSync);
     });
@@ -762,7 +827,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       client.removeChannel(channel);
       clearInterval(heartbeat);
     };
-  }, [syncWithSupabase]);
+  }, [syncWithSupabase, supabaseConfigVersion]);
 
   const refreshData = () => {
     setBranches(StorageService.getBranches());

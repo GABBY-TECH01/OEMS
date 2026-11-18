@@ -145,7 +145,27 @@ export const Settings: React.FC = () => {
     applyGoLiveCatalogAndContacts,
   } = useApp();
 
-  const [activeSubTab, setActiveSubTab] = useState<SettingsSubTab>('matrix');
+  const [activeSubTab, setActiveSubTab] = useState<SettingsSubTab>(() => {
+    const requested = sessionStorage.getItem('offnot_settings_subtab') as SettingsSubTab | null;
+    if (requested) {
+      sessionStorage.removeItem('offnot_settings_subtab');
+      return requested;
+    }
+    return 'matrix';
+  });
+
+  useEffect(() => {
+    const handleSubTabRequest = (e: Event) => {
+      const detail = (e as CustomEvent<SettingsSubTab>).detail;
+      if (detail) {
+        sessionStorage.removeItem('offnot_settings_subtab');
+        setActiveSubTab(detail);
+      }
+    };
+    window.addEventListener('offnot:open-settings-subtab', handleSubTabRequest);
+    return () => window.removeEventListener('offnot:open-settings-subtab', handleSubTabRequest);
+  }, []);
+
   const [formSettings, setFormSettings] = useState<CompanySettings>(settings);
   const [isApplyingCatalog, setIsApplyingCatalog] = useState(false);
 

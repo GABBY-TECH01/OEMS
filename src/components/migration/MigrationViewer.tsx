@@ -47,7 +47,7 @@ import rlsSql from '../../migration/03_rls_security_rules.sql?raw';
 import seedSql from '../../migration/04_seed_data.sql?raw';
 
 export const MigrationViewer: React.FC = () => {
-  const { branches, users, categories, suppliers, products, customers, settings, isSupabaseConnected, syncWithSupabase, supabaseSyncTime, supabaseLoading } = useApp();
+  const { branches, users, categories, suppliers, products, customers, settings, isSupabaseConnected, syncWithSupabase, supabaseSyncTime, supabaseSyncError, supabaseLoading } = useApp();
 
   const [selectedFile, setSelectedFile] = useState<string>('10_golive_catalog_contacts_refunds_patch.sql');
   const [copied, setCopied] = useState(false);
@@ -81,10 +81,10 @@ export const MigrationViewer: React.FC = () => {
 
   const configSource = getSupabaseConfigSource();
 
-  const handleSaveCredentials = (e: React.FormEvent) => {
+  const handleSaveCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputUrl.trim().startsWith('http')) {
-      setSaveMessage('Error: Supabase Project URL must start with https://');
+    if (!inputUrl.trim()) {
+      setSaveMessage('Error: Please enter your Supabase Project URL.');
       setTimeout(() => setSaveMessage(null), 4000);
       return;
     }
@@ -96,13 +96,20 @@ export const MigrationViewer: React.FC = () => {
 
     const res = saveSupabaseCredentials(inputUrl, inputAnonKey);
     if (res.success) {
+      setInputUrl(getSupabaseUrl());
+      setInputAnonKey(getSupabaseAnonKey());
       setIsConfigured(true);
-      setSaveMessage('Supabase credentials saved successfully! Now test your connection.');
-      setTimeout(() => setSaveMessage(null), 4000);
-      handleTestConnection();
+      setSaveMessage('Supabase credentials saved! Connecting and synchronizing live cloud database...');
+      const [, synced] = await Promise.all([handleTestConnection(), syncWithSupabase()]);
+      setSaveMessage(
+        synced
+          ? 'Supabase credentials saved & live database connected!'
+          : 'Supabase credentials saved. Check the connection test results below.'
+      );
+      setTimeout(() => setSaveMessage(null), 5000);
     } else {
       setSaveMessage(res.error || 'Failed to save credentials.');
-      setTimeout(() => setSaveMessage(null), 4000);
+      setTimeout(() => setSaveMessage(null), 5000);
     }
   };
 
@@ -476,6 +483,51 @@ export const MigrationViewer: React.FC = () => {
             <span>{saveMessage}</span>
           </div>
         )}
+
+        {/* Live Handshake Diagnostics Banner */}
+        <div
+          className={`p-3.5 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+            isSupabaseConnected
+              ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+              : isConfigured
+              ? 'bg-rose-50/80 border-rose-200 text-rose-900'
+              : 'bg-amber-50/80 border-amber-200 text-amber-900'
+          }`}
+        >
+          <div className="flex items-start sm:items-center gap-2">
+            {isSupabaseConnected ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5 sm:mt-0" />
+            ) : (
+              <AlertCircle className={`w-4 h-4 shrink-0 mt-0.5 sm:mt-0 ${isConfigured ? 'text-rose-600' : 'text-amber-600'}`} />
+            )}
+            <div>
+              <span className="font-bold">
+                {isSupabaseConnected
+                  ? `Connected & Synced (${supabaseSyncTime || 'Live'})`
+                  : isConfigured
+                  ? 'Database Connection Error'
+                  : 'Waiting for Supabase Credentials'}
+              </span>
+              {!isSupabaseConnected && (
+                <p className="text-[11px] opacity-90 mt-0.5">
+                  {supabaseSyncError ||
+                    'Enter your Supabase Project URL and Anon Public Key below (or add VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY in Vercel) and click Save & Connect.'}
+                </p>
+              )}
+            </div>
+          </div>
+          {isConfigured && !isSupabaseConnected && (
+            <button
+              type="button"
+              onClick={() => syncWithSupabase()}
+              disabled={supabaseLoading}
+              className="px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-bold shrink-0 flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${supabaseLoading ? 'animate-spin' : ''}`} />
+              <span>{supabaseLoading ? 'Reconnecting...' : 'Reconnect Now'}</span>
+            </button>
+          )}
+        </div>
 
         <form onSubmit={handleSaveCredentials} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
