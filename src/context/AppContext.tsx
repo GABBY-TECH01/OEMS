@@ -58,7 +58,7 @@ import {
   STORAGE_SUPABASE_ANON_KEY,
 } from '../lib/supabase';
 import {
-  fetchAllDataFromSupabase,
+  fetchAllDataFromSupabaseWithStatus,
   saveProductToSupabase,
   deleteProductFromSupabase,
   saveBranchToSupabase,
@@ -506,6 +506,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     }
 
+    if (!navigator.onLine) {
+      setIsSupabaseConnected(false);
+      setSupabaseSyncError('Device is offline. Changes are saved locally and will sync automatically when online.');
+      return false;
+    }
+
     if (isResettingRef.current || inFlightCloudWritesRef.current > 0) {
       return false;
     }
@@ -535,7 +541,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return false;
         }
 
-        const cloudData = await fetchAllDataFromSupabase();
+        const { data: cloudData, error: cloudFetchError } = await fetchAllDataFromSupabaseWithStatus();
       if (cloudData) {
         if (isResettingRef.current) {
           return false;
@@ -688,7 +694,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return true;
       } else {
         setIsSupabaseConnected(false);
-        setSupabaseSyncError('Could not retrieve data from Supabase. Check Project URL, Anon Key, and network connectivity.');
+        setSupabaseSyncError(
+          cloudFetchError || 'Could not retrieve data from Supabase. Check Project URL, Anon Key, and network connectivity.'
+        );
         return false;
       }
       } catch (err: any) {

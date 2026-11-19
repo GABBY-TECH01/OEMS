@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Bell,
-  Search,
   ShieldCheck,
   User as UserIcon,
   ChevronDown,
@@ -30,6 +29,7 @@ import { getRoleLabel } from '../../utils/formatters';
 import { UserRole } from '../../types';
 import { BRAND_LOGO_URL } from '../../constants/branding';
 import { isSupabaseConfigured } from '../../lib/supabase';
+import { GlobalSearch } from './GlobalSearch';
 
 interface HeaderProps {
   onOpenSidebar?: () => void;
@@ -44,8 +44,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
     notifications,
     markNotificationRead,
     markAllNotificationsRead,
-    globalSearchQuery,
-    setGlobalSearchQuery,
     branches,
     activeBranchId,
     setActiveBranchId,
@@ -190,20 +188,20 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
           }}
           className="w-7 h-7 object-contain rounded-md bg-white border border-slate-200 dark:border-slate-700 p-0.5 shadow-2xs shrink-0"
         />
-        <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 hidden md:inline">
+        <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 hidden 2xl:inline whitespace-nowrap shrink-0">
           {settings.pwaShortName || 'Offnot Energy'}
         </span>
-        <span className="text-slate-300 hidden md:inline" aria-hidden="true">
+        <span className="text-slate-300 hidden 2xl:inline shrink-0" aria-hidden="true">
           /
         </span>
-        <h1 className="text-xs sm:text-sm md:text-base font-bold text-slate-900 dark:text-white truncate max-w-[95px] sm:max-w-[170px] md:max-w-none">
+        <h1 className="text-xs sm:text-sm md:text-base font-bold text-slate-900 dark:text-white truncate max-w-[100px] sm:max-w-[150px] lg:max-w-[180px] xl:max-w-[210px]">
           {getBreadcrumbTitle(activeTab)}
         </h1>
       </div>
 
       {/* Zone 2: Branch Indicator / Switcher */}
       {canAccessAllBranches ? (
-        <div className="relative" data-dropdown="branch">
+        <div className="relative shrink-0" data-dropdown="branch">
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -212,7 +210,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
               setShowUserMenu(false);
               setShowNotifications(false);
             }}
-            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg transition-all shadow-2xs"
+            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg transition-all shadow-2xs whitespace-nowrap shrink-0"
             title="Superadmin: Filter view by branch or view consolidated multi-branch analytics"
           >
             {activeBranchId === 'all' ? (
@@ -220,7 +218,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
             ) : (
               <Building2 className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400 shrink-0" />
             )}
-            <span className="hidden sm:inline truncate max-w-[130px] md:max-w-[210px] font-semibold text-slate-900 dark:text-white">
+            <span className="hidden sm:inline truncate max-w-[120px] md:max-w-[150px] xl:max-w-[190px] font-semibold text-slate-900 dark:text-white">
               {currentBranchName}
             </span>
             <span className="sm:hidden font-bold text-slate-900 dark:text-white text-[11px] truncate max-w-[70px]">
@@ -333,38 +331,38 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
       )}
 
       {/* Supabase Cloud Live Database Handshake Pill */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 shrink-0">
         {isSupabaseConnected ? (
           <button
             type="button"
             onClick={() => syncWithSupabase()}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-all shadow-2xs"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-all shadow-2xs whitespace-nowrap shrink-0"
             title={`Supabase PostgreSQL Connected & In-Sync. Last synchronized at ${supabaseSyncTime || 'now'}. Click to pull latest data.`}
           >
-            <span className="relative flex h-2 w-2">
+            <span className="relative flex h-2 w-2 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <Database className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span className="hidden sm:inline">Supabase Live</span>
+            <Database className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="hidden sm:inline whitespace-nowrap">Supabase Live</span>
             {supabaseLoading ? (
-              <RefreshCw className="w-3 h-3 animate-spin text-emerald-600 ml-0.5" />
+              <RefreshCw className="w-3 h-3 animate-spin text-emerald-600 ml-0.5 shrink-0" />
             ) : (
-              <span className="text-[9px] text-emerald-700/80 font-mono hidden md:inline">({supabaseSyncTime || 'Synced'})</span>
+              <span className="text-[9px] text-emerald-700/80 font-mono hidden 2xl:inline whitespace-nowrap">({supabaseSyncTime || 'Synced'})</span>
             )}
           </button>
         ) : isSupabaseConfigured() ? (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
               onClick={() => syncWithSupabase()}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-rose-800 bg-rose-50 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-lg hover:bg-rose-100 transition-all shadow-2xs"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-bold text-rose-800 bg-rose-50 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-lg hover:bg-rose-100 transition-all shadow-2xs whitespace-nowrap shrink-0"
               title={supabaseSyncError ? `Database sync paused: ${supabaseSyncError}. Click to reconnect now.` : 'Supabase database disconnected. Click to reconnect now.'}
             >
-              <span className="h-2 w-2 rounded-full bg-rose-500"></span>
-              <Database className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-              <span className="hidden sm:inline">{supabaseLoading ? 'Connecting...' : 'Reconnect DB'}</span>
-              {supabaseLoading && <RefreshCw className="w-3 h-3 animate-spin text-rose-600 ml-0.5" />}
+              <span className="h-2 w-2 rounded-full bg-rose-500 shrink-0"></span>
+              <Database className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+              <span className="hidden sm:inline whitespace-nowrap">{supabaseLoading ? 'Connecting...' : 'Reconnect DB'}</span>
+              {supabaseLoading && <RefreshCw className="w-3 h-3 animate-spin text-rose-600 ml-0.5 shrink-0" />}
             </button>
             {(currentUser.role === 'super_admin' || (currentUser.role === 'admin' && currentUser.hasFullSystemAccess)) && (
               <button
@@ -374,7 +372,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
                   window.dispatchEvent(new CustomEvent('offnot:open-settings-subtab', { detail: 'supabase' }));
                   setActiveTab('settings');
                 }}
-                className="p-1 text-slate-500 hover:text-emerald-800 bg-slate-100 hover:bg-emerald-50 border border-slate-200 rounded-lg transition-colors"
+                className="p-1.5 text-slate-500 hover:text-emerald-800 bg-slate-100 hover:bg-emerald-50 border border-slate-200 rounded-lg transition-colors shrink-0"
                 title="Open Supabase Live DB & SQL Settings"
               >
                 <SettingsIcon className="w-3.5 h-3.5" />
@@ -389,37 +387,18 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
               window.dispatchEvent(new CustomEvent('offnot:open-settings-subtab', { detail: 'supabase' }));
               setActiveTab('settings');
             }}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-amber-800 bg-amber-50 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-lg hover:bg-amber-100 transition-all shadow-2xs"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-bold text-amber-800 bg-amber-50 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-lg hover:bg-amber-100 transition-all shadow-2xs whitespace-nowrap shrink-0"
             title="Supabase live cloud database is not configured on this device. Click to enter your Supabase Project URL and Anon Key."
           >
-            <span className="h-2 w-2 rounded-full bg-amber-500"></span>
-            <Database className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-            <span className="hidden sm:inline">Connect Supabase</span>
+            <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0"></span>
+            <Database className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="hidden sm:inline whitespace-nowrap">Connect Supabase</span>
           </button>
         )}
       </div>
 
-      {/* Zone 3: Global Search Bar */}
-      <div className="flex-1 max-w-sm hidden xl:block">
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search solar items, SKUs, customers, invoices..."
-            value={globalSearchQuery}
-            onChange={e => setGlobalSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 focus:border-emerald-600 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none transition-all"
-          />
-          {globalSearchQuery && (
-            <button
-              onClick={() => setGlobalSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Zone 3: Global Search Trigger & Command Modal */}
+      <GlobalSearch />
 
       {/* Zone 4: Role Switcher, Notifications & Profile */}
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -448,10 +427,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
               className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-emerald-900 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/80 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 rounded-lg transition-colors whitespace-nowrap"
               title="Superadmin: Switch active role to test permissions"
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
-              <span className="hidden lg:inline">{getRoleLabel(currentUser.role)}</span>
-              <span className="lg:hidden">{currentUser.name.split(' ')[0]}</span>
-              <ChevronDown className="w-3 h-3 text-emerald-700 opacity-70" />
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400 shrink-0" />
+              <span className="hidden xl:inline max-w-[135px] truncate">{getRoleLabel(currentUser.role)}</span>
+              <span className="xl:hidden">{currentUser.name.split(' ')[0]}</span>
+              <ChevronDown className="w-3 h-3 text-emerald-700 opacity-70 shrink-0" />
             </button>
 
             {showRoleMenu && (
@@ -574,9 +553,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSidebar }) => {
             <div className="w-7 h-7 rounded-full bg-emerald-900 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
               {currentUser.name[0]}
             </div>
-            <div className="hidden lg:block">
-              <p className="text-xs font-semibold text-slate-900 leading-none">{currentUser.name}</p>
-              <p className="text-[10px] text-slate-500 mt-0.5 leading-none">
+            <div className="hidden lg:block max-w-[130px] xl:max-w-[165px]">
+              <p className="text-xs font-semibold text-slate-900 dark:text-white leading-none truncate">{currentUser.name}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5 leading-none truncate">
                 {currentUser.branchName || 'Ibadan Facility'}
               </p>
             </div>

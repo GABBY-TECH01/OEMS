@@ -66,10 +66,22 @@ export interface SupabaseDataset {
 // DATA FETCHING (Cloud Database -> React State)
 // ============================================================================
 
-export async function fetchAllDataFromSupabase(): Promise<SupabaseDataset | null> {
+function formatSupabaseErrorMessage(raw: unknown): string {
+  const msg = raw instanceof Error ? raw.message : String(raw || 'Unknown Supabase error');
+  const lower = msg.toLowerCase();
+  if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('load failed')) {
+    return 'Cannot reach Supabase server (check internet connection, Project URL, or ensure your Supabase project is not paused).';
+  }
+  return msg;
+}
+
+export async function fetchAllDataFromSupabaseWithStatus(): Promise<{
+  data: SupabaseDataset | null;
+  error: string | null;
+}> {
   const client = getSupabaseClient();
   if (!client || !isSupabaseConfigured()) {
-    return null;
+    return { data: null, error: 'Supabase credentials are not configured on this device.' };
   }
 
   try {
@@ -109,11 +121,13 @@ export async function fetchAllDataFromSupabase(): Promise<SupabaseDataset | null
       client.from('kpi_daily_logs').select('*').order('created_at', { ascending: false }).limit(500),
     ]);
 
-    // Detect connection/auth/RLS failures: if all core tables errored, throw the real Supabase error
+    // Detect connection/auth/RLS failures: if all core tables errored, return structured error cleanly
     const coreResponses = [branchesRes, usersRes, productsRes, salesRes, settingsRes];
     const coreErrors = coreResponses.map(r => r.error).filter(Boolean);
     if (coreErrors.length === coreResponses.length && coreErrors[0]) {
-      throw new Error(coreErrors[0].message || 'Supabase core query failed');
+      const friendly = formatSupabaseErrorMessage(coreErrors[0].message);
+      console.warn('Supabase sync unreachable:', friendly);
+      return { data: null, error: friendly };
     }
 
     // Map Branches
@@ -514,27 +528,36 @@ export async function fetchAllDataFromSupabase(): Promise<SupabaseDataset | null
     }));
 
     return {
-      branches,
-      products,
-      sales,
-      stockMovements,
-      customers,
-      suppliers,
-      purchaseOrders,
-      quotations,
-      projects,
-      expenses,
-      users,
-      staffAccounts,
-      settings,
-      auditLogs,
-      notifications,
-      staffKpis,
+      data: {
+        branches,
+        products,
+        sales,
+        stockMovements,
+        customers,
+        suppliers,
+        purchaseOrders,
+        quotations,
+        projects,
+        expenses,
+        users,
+        staffAccounts,
+        settings,
+        auditLogs,
+        notifications,
+        staffKpis,
+      },
+      error: null,
     };
   } catch (err) {
-    console.error('Failed to fetch data from Supabase:', err);
-    return null;
+    const friendly = formatSupabaseErrorMessage(err);
+    console.warn('Supabase fetch warning:', friendly);
+    return { data: null, error: friendly };
   }
+}
+
+export async function fetchAllDataFromSupabase(): Promise<SupabaseDataset | null> {
+  const res = await fetchAllDataFromSupabaseWithStatus();
+  return res.data;
 }
 
 // ============================================================================
@@ -578,8 +601,8 @@ export async function saveProductToSupabase(product: Product): Promise<{ success
     if (error) throw error;
     return { success: true };
   } catch (err: any) {
-    console.error('saveProductToSupabase error:', err);
-    return { success: false, error: err.message || String(err) };
+    console.warn('saveProductToSupabase warning:', err);
+    return { success: false, error: formatSupabaseErrorMessage(err) };
   }
 }
 
@@ -624,8 +647,8 @@ export async function saveBranchToSupabase(branch: Branch): Promise<{ success: b
     if (error) throw error;
     return { success: true };
   } catch (err: any) {
-    console.error('saveBranchToSupabase error:', err);
-    return { success: false, error: err.message || String(err) };
+    console.warn('saveBranchToSupabase warning:', err);
+    return { success: false, error: formatSupabaseErrorMessage(err) };
   }
 }
 
@@ -831,8 +854,8 @@ export async function saveSaleToSupabase(sale: Sale, payments?: PaymentRecord[])
 
     return { success: true };
   } catch (err: any) {
-    console.error('saveSaleToSupabase error:', err);
-    return { success: false, error: err.message || String(err) };
+    console.warn('saveSaleToSupabase warning:', err);
+    return { success: false, error: formatSupabaseErrorMessage(err) };
   }
 }
 
@@ -1420,8 +1443,8 @@ export async function saveSaleReturnToSupabase(
 
     return { success: true };
   } catch (err: any) {
-    console.error('saveSaleReturnToSupabase error:', err);
-    return { success: false, error: err.message || String(err) };
+    console.warn('saveSaleReturnToSupabase warning:', err);
+    return { success: false, error: formatSupabaseErrorMessage(err) };
   }
 }
 
@@ -1586,10 +1609,10 @@ export async function resetCleanZeroLedgerInSupabase(
 
     return { success: true, clearedTables };
   } catch (err: any) {
-    console.error('resetCleanZeroLedgerInSupabase error:', err);
+    console.warn('resetCleanZeroLedgerInSupabase warning:', err);
     return {
       success: false,
-      error: err.message || String(err),
+      error: formatSupabaseErrorMessage(err),
       clearedTables,
     };
   }
